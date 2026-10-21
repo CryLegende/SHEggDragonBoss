@@ -1,0 +1,179 @@
+# ----------------------------------------------------------------#
+#                Configuration de SHEggDragonBoss                 #
+# ----------------------------------------------------------------#
+#
+# Placeholders disponibles pour les messages et hologrammes:
+# {shards_current} - Le nombre actuel d'éclats dans l'oeuf.
+# {shards_required} - Le nombre total d'éclats requis.
+# {time} - Le temps restant dans le compte à rebours (en secondes).
+# {island} - Le nom de l'île où le boss apparaît.
+#
+# Vous pouvez utiliser les codes couleurs de Minecraft avec le symbole '&'.
+# Exemple: '&cMessage en rouge &l&navec du gras souligné.'
+
+messages:
+  # Message envoyé quand un joueur n'a pas la permission (via SuperiorSkyblock2).
+  no-permission: "&7&l« &c&lSH &8&l» &7Vous n'avez pas la permission de faire cela sur cette île."
+  # Message si le bloc cliqué n'est pas dans le monde d'une île Skyblock.
+  not-on-island: ""
+  # Message affiché la première fois qu'un joueur donne un éclat à un oeuf.
+  start-hatching: "&7&l« &5&lSH &8&l» &7L'éclat d'écho provoque une réaction sur l'oeuf de dragon..."
+  # Message envoyé aux membres de l'île au début du compte à rebours.
+  countdown-start: "&7&l« &5&lSH &8&l» &7L'oeuf est sur le point d'éclore !"
+  # Message si l'on essaye d'interagir avec un oeuf dont le compte à rebours est lancé,
+  # ou si on essaye de le casser pendant ce temps.
+  already-hatching: "&7&l« &5&lSH &8&l» &7Cet oeuf est sur le point d'éclore et ne peut plus être touché !"
+  # Message si un joueur essaye de commencer un rituel alors qu'un boss est déjà en vie sur son île.
+  dragon-active-on-island: "&7&l« &c&lSH &8&l» &7Vous ne pouvez pas faire éclore un autre oeuf tant qu'un boss est en vie sur votre île !"
+
+  # Configuration des textes de l'hologramme de progression.
+  hologram-progress:
+    - "&d&lÉclosion de l'œuf"
+    - "&f{shards_current} &7/&f {shards_required} &dFragments"
+
+  # Configuration des textes de l'hologramme de compte à rebours.
+  hologram-countdown:
+    - "&c&lÉCLOSION IMMINENTE"
+    - "&e&l{time}"
+
+hologram-settings:
+  # La hauteur en blocs au-dessus de l'oeuf où l'hologramme apparaîtra.
+  height: 1.3
+  # Activer l'ombre portée sur le texte pour une meilleure lisibilité.
+  text-shadow: true
+  # La hauteur de l'hologramme PENDANT le compte à rebours.
+  countdown-height: 2.5
+  # La taille (échelle) de l'hologramme PENDANT le compte à rebours.
+  countdown-scale: 3.0
+
+hatching:
+  # L'item requis pour nourrir l'oeuf. Doit être un nom de matériau Spigot valide.
+  required-item: "ECHO_SHARD"
+  # Le nombre total d'items requis pour commencer le compte à rebours.
+  required-shards: 15
+  # La durée en secondes du compte à rebours final avant l'apparition du boss.
+  countdown-seconds: 10
+
+# Configuration du boss qui apparaîtra.
+boss:
+  entity-type: "PHANTOM"
+  name: "&5Jeune Ender Dragon"
+  bossbar-title: "{name} &7- &c&l{current_health} &4/ &c&l{max_health} &4❤"
+  health: 200.0
+  phantom-size: 7
+
+  # --- PARAMÈTRES DE COMBAT ---
+  attack-damage: 35.0
+  attack-cooldown-ticks: 40
+  movement-speed-multiplier: 2
+  stopping-distance: 2.5
+  armor: 20.0
+  armor-toughness: 5.0
+
+  # --- ATTAQUE À DISTANCE ---
+  ranged-attack:
+    enabled: true
+    # Temps en ticks entre chaque boule de feu.
+    cooldown-ticks: 100
+    # Distance minimale (au carré) pour que le boss utilise cette attaque.
+    # 16.0 = 4 blocs. Le boss attaquera à distance si le joueur est plus loin que ça.
+    min-range-squared: 25.0
+    sound:
+      sound: "ENTITY_ENDER_DRAGON_SHOOT"
+      volume: 3.0
+      pitch: 1.0
+
+  # --- EFFETS D'APPARITION ---
+  spawn-explosion:
+    enabled: true
+    # La puissance de l'explosion (4.0 = TNT, 8.0 = Creeper chargé).
+    power: 10.0
+    # Si l'explosion doit créer du feu.
+    set-fire: true
+    # Si l'explosion doit casser les blocs.
+    break-blocks: false
+
+  # --- SONS ---
+  spawn-sound:
+    sound: "ENTITY_ENDER_DRAGON_GROWL"
+    volume: 8.0
+    pitch: 2
+  ambient-sound:
+    sound: "ENTITY_ENDER_DRAGON_GROWL"
+    volume: 4.0
+    pitch: 2.0
+    delay: 3
+  death-sound:
+    sound: "ENTITY_WITHER_DEATH"
+    volume: 2.0
+    pitch: 0.5
+  hurt-sound:
+    sound: "ENTITY_WITHER_HURT"
+    volume: 2.0
+    pitch: 0.1
+
+  # --- PARTICULES ---
+  particles:
+    ambient:
+      enabled: true
+      # Type de particule.
+      particle-type: "REVERSE_PORTAL"
+      count: 5
+      speed: 0.05
+    ranged-attack:
+      enabled: true
+      particle-type: "EXPLOSION"
+      count: 1
+      speed: 0.1
+
+  # --- RÉCOMPENSES ---
+  rewards:
+    # Le montant total d'XP à donner dans une seule orbe.
+    xp-reward: 15000
+    # Liste des items à donner à la mort du boss.
+    items:
+      - material: "PHANTOM_MEMBRANE"
+        amount: 1
+      # Exemple d'item plus complexe :
+      # - material: "DIAMOND"
+      #   amount: 10
+      #   name: "&bFragment du Vide"
+      #   lore:
+      #     - "&7Un diamant imprégné de"
+      #     - "&7l'énergie du Phantom."
+
+    # Commandes exécutées par la console à la mort du boss.
+    # Placeholders : {player} (le tueur), {island} (nom du propriétaire de l'île),
+    #                {world}, {x}, {y}, {z}
+    # Les commandes contenant {player} sont ignorées si le boss meurt sans tueur.
+    # Ne pas mettre le '/' au début.
+    commands:
+      - "rc dragonegg-rewards {player}"
+    # Exemple :
+    # commands:
+    #   - "eco give {player} 5000"
+    #   - "broadcast &d{player} &7a vaincu le boss de &d{island} &7!"
+
+  dynamic-stats:
+    enabled: true
+    health-per-island-level: 0.0005
+    health-per-island-member: 15.0
+
+sounds:
+  add-shard:
+    sound: "ENTITY_ELDER_GUARDIAN_HURT"
+    volume: 1.0
+    pitch: 0.1
+  hatching-start:
+    sound: "ENTITY_ENDER_DRAGON_GROWL"
+    volume: 2.0
+    pitch: 0.1
+  countdown-tick:
+    sound: "ENTITY_LIGHTNING_BOLT_THUNDER"
+    volume: 1.0
+    pitch: 0.1
+
+# Configuration de la permission personnalisée pour SuperiorSkyblock2.
+island-permission:
+  # Le nom interne de la permission. NE PAS CHANGER après la première utilisation.
+  name: "EGG_HATCH"
