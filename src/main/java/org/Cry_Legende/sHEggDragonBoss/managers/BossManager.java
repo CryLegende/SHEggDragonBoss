@@ -131,7 +131,7 @@ public class BossManager {
     }
 
     public void restoreBoss(Island island, LivingEntity boss) {
-        new BossController(plugin, this, island, boss, boss.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getBaseValue());
+        new BossController(plugin, this, island, boss, boss.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getBaseValue());
     }
 
     public void registerActiveBoss(BossController controller) {

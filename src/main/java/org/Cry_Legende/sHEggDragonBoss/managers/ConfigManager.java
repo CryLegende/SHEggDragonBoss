@@ -218,7 +218,7 @@ public class ConfigManager {
             rangedAttackParticleType = Particle.valueOf(config.getString("boss.particles.ranged-attack.particle-type", "EXPLOSION_LARGE").toUpperCase());
         } catch (IllegalArgumentException e) {
             plugin.getLogger().warning("Type de particule d'attaque à distance invalide. Utilisation de EXPLOSION_LARGE par défaut.");
-            rangedAttackParticleType = Particle.EXPLOSION_LARGE;
+            rangedAttackParticleType = Particle.EXPLOSION;
         }
         rangedAttackParticleCount = config.getInt("boss.particles.ranged-attack.count", 1);
         rangedAttackParticleSpeed = config.getDouble("boss.particles.ranged-attack.speed", 0.1);

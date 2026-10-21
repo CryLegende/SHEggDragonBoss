@@ -198,7 +198,7 @@ public class BossController extends BukkitRunnable {
         spawned.setPersistent(true);
         spawned.getPersistentDataContainer().set(SHEggDragonBoss.BOSS_KEY, org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
         if (spawned instanceof Phantom) ((Phantom) spawned).setSize(configManager.getPhantomSize());
-        AttributeInstance maxHealthAttr = spawned.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+        AttributeInstance maxHealthAttr = spawned.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealthAttr != null) maxHealthAttr.setBaseValue(maxHealth);
         spawned.setHealth(Math.min(currentHealth, maxHealth));
         return spawned;
