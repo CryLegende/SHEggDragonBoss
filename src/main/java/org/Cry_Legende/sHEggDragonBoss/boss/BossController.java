@@ -54,6 +54,8 @@ public class BossController extends BukkitRunnable {
         this.maxHealth = maxHealth;
         this.boss = createBossEntity(spawnLocation, maxHealth, currentHealth);
         this.bossBar = createBossBar();
+        this.lastKnownLocation = boss.getLocation();
+        this.lastKnownHealth = boss.getHealth();
 
         String islandName = (island != null && island.getOwner() != null) ? "l'île de " + island.getOwner().getName() : "une île inconnue";
         if (isFirstSpawn) {
@@ -73,6 +75,8 @@ public class BossController extends BukkitRunnable {
         this.maxHealth = maxHealth;
         this.boss = existingBoss;
         this.bossBar = createBossBar();
+        this.lastKnownLocation = boss.getLocation();
+        this.lastKnownHealth = boss.getHealth();
         String islandName = (island != null && island.getOwner() != null) ? "l'île de " + island.getOwner().getName() : "une île inconnue";
         plugin.getLogManager().log(String.format("Un boss a été restauré sur %s après un redémarrage.", islandName));
         bossManager.registerActiveBoss(this);
@@ -114,11 +118,13 @@ public class BossController extends BukkitRunnable {
     }
 
     private void updateTarget() {
+        // Une île peut couvrir plusieurs dimensions : seule la cible du même monde que le boss est mesurable
+        World bossWorld = boss.getWorld();
         List<Player> islandMembers = island.getIslandMembers(true).stream()
             .map(SuperiorPlayer::asPlayer)
-            .filter(p -> p != null && p.isOnline() && !p.isDead() && p.getGameMode() != org.bukkit.GameMode.SPECTATOR && island.isInside(p.getLocation()))
+            .filter(p -> p != null && p.isOnline() && !p.isDead() && p.getGameMode() != org.bukkit.GameMode.SPECTATOR && p.getWorld().equals(bossWorld) && island.isInside(p.getLocation()))
             .collect(Collectors.toList());
-        Player validExternalTarget = (externalTarget != null && externalTarget.isOnline() && !externalTarget.isDead()) ? externalTarget : null;
+        Player validExternalTarget = (externalTarget != null && externalTarget.isOnline() && !externalTarget.isDead() && externalTarget.getWorld().equals(bossWorld)) ? externalTarget : null;
         this.target = Stream.concat(islandMembers.stream(), Stream.ofNullable(validExternalTarget))
             .filter(Objects::nonNull).distinct()
             .min(Comparator.comparingDouble(p -> p.getLocation().distanceSquared(boss.getLocation())))
@@ -126,7 +132,8 @@ public class BossController extends BukkitRunnable {
     }
 
     private void updateAttackingMovement() {
-        if (target == null) return;
+        // La cible est choisie une fois par seconde : elle a pu changer de monde ou se déconnecter depuis
+        if (target == null || !target.isOnline() || !target.getWorld().equals(boss.getWorld())) return;
         Location bossLoc = boss.getLocation();
         Location targetLoc = target.getEyeLocation();
         Vector direction = targetLoc.toVector().subtract(bossLoc.toVector());

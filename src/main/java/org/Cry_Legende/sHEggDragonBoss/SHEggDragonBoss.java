@@ -144,29 +144,18 @@ public final class SHEggDragonBoss extends JavaPlugin {
                 }
             }
         }
-        int restoredBosses = 0;
-        // ... (Le reste de la méthode reste identique) ...
-        // Je ne recopie pas tout le bloc de cleanup pour alléger, il n'a pas changé.
-        // Assure-toi de garder ton code original ici.
-        // Code original pour la restauration des boss:
         if (bossManager == null) return;
 
+        // Boss déjà présents dans les mondes chargés ; les autres sont repris à leur chargement (EntitiesLoadEvent)
+        int before = bossManager.getActiveBossCount();
         for (World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
-                if (entity instanceof LivingEntity && entity.getPersistentDataContainer().has(BOSS_KEY, PersistentDataType.BYTE)) {
-                    LivingEntity boss = (LivingEntity) entity;
-                    // Note: SuperiorSkyblockAPI.getGrid() est statique, donc accessible
-                    com.bgsoftware.superiorskyblock.api.island.Island island = com.bgsoftware.superiorskyblock.api.SuperiorSkyblockAPI.getGrid().getIslandAt(boss.getLocation());
-                    if (island != null) {
-                        bossManager.restoreBoss(island, boss);
-                        restoredBosses++;
-                    } else {
-                        getLogger().warning("Un boss a été trouvé en dehors d'une île et a été supprimé.");
-                        boss.remove();
-                    }
+                if (entity instanceof LivingEntity boss && entity.getPersistentDataContainer().has(BOSS_KEY, PersistentDataType.BYTE)) {
+                    bossManager.adoptBoss(boss);
                 }
             }
         }
+        int restoredBosses = bossManager.getActiveBossCount() - before;
         if (restoredBosses > 0) getLogger().info(restoredBosses + " boss actifs ont été restaurés.");
     }
 

@@ -7,10 +7,12 @@ import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.Cry_Legende.sHEggDragonBoss.managers.ConfigManager;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.joml.Vector3f;
@@ -20,6 +22,7 @@ import java.util.stream.Collectors;
 
 public class HatchingProcess {
     private final SHEggDragonBoss plugin;
+    private final NamespacedKey animatorKey;
     private final Location location;
     private int currentShards = 0;
     private Hologram hologram;
@@ -29,6 +32,7 @@ public class HatchingProcess {
 
     public HatchingProcess(SHEggDragonBoss plugin, Location location) {
         this.plugin = plugin;
+        this.animatorKey = new NamespacedKey(plugin, "egg_animator");
         this.location = location;
         createHologram(plugin.getConfigManager());
     }
@@ -83,6 +87,9 @@ public class HatchingProcess {
     public void startEggAnimation() {
         location.getBlock().setType(Material.AIR);
         eggAnimator = (BlockDisplay) location.getWorld().spawnEntity(location.clone().add(0.5, 0, 0.5), EntityType.BLOCK_DISPLAY);
+        // Jamais sauvegardé (pas d'animation orpheline après un redémarrage) et marqué pour ne retirer que le nôtre
+        eggAnimator.setPersistent(false);
+        eggAnimator.getPersistentDataContainer().set(animatorKey, PersistentDataType.BYTE, (byte) 1);
         eggAnimator.setBlock(Material.DRAGON_EGG.createBlockData());
         Transformation transformation = eggAnimator.getTransformation();
         transformation.getTranslation().set(-0.5f, 0.0f, -0.5f);
@@ -93,7 +100,10 @@ public class HatchingProcess {
         if (eggAnimator != null && !eggAnimator.isDead()) {
             eggAnimator.remove();
         }
-        location.getNearbyEntitiesByType(BlockDisplay.class, 1).forEach(Entity::remove);
+        // Seuls nos affichages : d'autres plugins (blocs personnalisés) placent aussi des BlockDisplay près des oeufs
+        location.getNearbyEntitiesByType(BlockDisplay.class, 1).stream()
+            .filter(d -> d.getPersistentDataContainer().has(animatorKey, PersistentDataType.BYTE))
+            .forEach(Entity::remove);
     }
 
     public void transformHologramForCountdown(ConfigManager configManager) {
@@ -110,6 +120,8 @@ public class HatchingProcess {
         String hologramName = "sHEDragon-" + location.getWorld().getName() + "_" + location.getBlockX() + "_" + location.getBlockY() + "_" + location.getBlockZ();
         TextHologramData data = new TextHologramData(hologramName, holoLocation);
         data.setText(formatHologramText(configManager.getHologramProgress(), configManager.getRequiredShards()));
+        // Recréé par le plugin à chaque chargement : FancyHolograms ne doit pas le sauvegarder (doublons, hologrammes orphelins)
+        data.setPersistent(false);
         data.setTextShadow(configManager.isHologramTextShadowEnabled());
         data.setBackground(Hologram.TRANSPARENT);
         data.setBillboard(Display.Billboard.VERTICAL);

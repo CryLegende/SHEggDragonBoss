@@ -3,13 +3,17 @@ package org.Cry_Legende.sHEggDragonBoss.managers;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
+import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -145,6 +149,11 @@ public class ConfigManager {
             plugin.getLogger().severe("Le type d'entité '" + config.getString("boss.entity-type") + "' est invalide ! Utilisation de PHANTOM par défaut.");
             bossEntityType = EntityType.PHANTOM;
         }
+        if (!bossEntityType.isSpawnable() || bossEntityType.getEntityClass() == null || !LivingEntity.class.isAssignableFrom(bossEntityType.getEntityClass())) {
+            // Le boss est converti en LivingEntity à l'apparition : un autre type ferait planter l'éclosion
+            plugin.getLogger().severe("Le type d'entité '" + bossEntityType + "' ne peut pas servir de boss ! Utilisation de PHANTOM par défaut.");
+            bossEntityType = EntityType.PHANTOM;
+        }
         bossName = loadString("boss.name");
         bossBarTitle = loadString("boss.bossbar-title");
         bossHealth = config.getDouble("boss.health", 300.0);
@@ -160,11 +169,7 @@ public class ConfigManager {
         rangedAttackEnabled = config.getBoolean("boss.ranged-attack.enabled", true);
         rangedAttackCooldownTicks = config.getInt("boss.ranged-attack.cooldown-ticks", 100);
         rangedAttackMinRangeSquared = config.getDouble("boss.ranged-attack.min-range-squared", 16.0);
-        try {
-            rangedAttackSound = Sound.valueOf(config.getString("boss.ranged-attack.sound.sound", "ENTITY_ENDER_DRAGON_SHOOT").toUpperCase());
-        } catch (IllegalArgumentException e) {
-            rangedAttackSound = Sound.ENTITY_ENDER_DRAGON_SHOOT;
-        }
+        rangedAttackSound = sound(config.getString("boss.ranged-attack.sound.sound", "ENTITY_ENDER_DRAGON_SHOOT"), Sound.ENTITY_ENDER_DRAGON_SHOOT);
         rangedAttackSoundVolume = (float) config.getDouble("boss.ranged-attack.sound.volume", 3.0);
         rangedAttackSoundPitch = (float) config.getDouble("boss.ranged-attack.sound.pitch", 1.0);
 
@@ -173,33 +178,18 @@ public class ConfigManager {
         spawnExplosionSetFire = config.getBoolean("boss.spawn-explosion.set-fire", false);
         spawnExplosionBreakBlocks = config.getBoolean("boss.spawn-explosion.break-blocks", true);
 
-        try {
-            bossSpawnSound = Sound.valueOf(config.getString("boss.spawn-sound.sound", "ENTITY_ENDER_DRAGON_DEATH").toUpperCase());
-        } catch (IllegalArgumentException e) {
-            bossSpawnSound = Sound.ENTITY_ENDER_DRAGON_DEATH;
-        }
+        bossSpawnSound = sound(config.getString("boss.spawn-sound.sound", "ENTITY_ENDER_DRAGON_DEATH"), Sound.ENTITY_ENDER_DRAGON_DEATH);
         bossSpawnSoundVolume = (float) config.getDouble("boss.spawn-sound.volume", 2.0);
         bossSpawnSoundPitch = (float) config.getDouble("boss.spawn-sound.pitch", 0.1);
-        try {
-            bossAmbientSound = Sound.valueOf(config.getString("boss.ambient-sound.sound", "ENTITY_WARDEN_AMBIENT").toUpperCase());
-        } catch (IllegalArgumentException e) {
-            bossAmbientSound = Sound.ENTITY_WARDEN_AMBIENT;
-        }
+        bossAmbientSound = sound(config.getString("boss.ambient-sound.sound", "ENTITY_WARDEN_AMBIENT"), Sound.ENTITY_WARDEN_AMBIENT);
         bossSoundVolume = (float) config.getDouble("boss.ambient-sound.volume", 2.0);
         bossSoundPitch = (float) config.getDouble("boss.ambient-sound.pitch", 0.1);
-        bossSoundDelay = config.getInt("boss.ambient-sound.delay", 3);
-        try {
-            bossDeathSound = Sound.valueOf(config.getString("boss.death-sound.sound", "ENTITY_WITHER_DEATH").toUpperCase());
-        } catch (IllegalArgumentException e) {
-            bossDeathSound = Sound.ENTITY_WITHER_DEATH;
-        }
+        // Au moins 1 seconde : 0 provoquerait une division par zéro à chaque tick
+        bossSoundDelay = Math.max(1, config.getInt("boss.ambient-sound.delay", 3));
+        bossDeathSound = sound(config.getString("boss.death-sound.sound", "ENTITY_WITHER_DEATH"), Sound.ENTITY_WITHER_DEATH);
         bossDeathSoundVolume = (float) config.getDouble("boss.death-sound.volume", 2.0);
         bossDeathSoundPitch = (float) config.getDouble("boss.death-sound.pitch", 0.5);
-        try {
-            bossHurtSound = Sound.valueOf(config.getString("boss.hurt-sound.sound", "ENTITY_WITHER_HURT").toUpperCase());
-        } catch (IllegalArgumentException e) {
-            bossHurtSound = Sound.ENTITY_WITHER_HURT;
-        }
+        bossHurtSound = sound(config.getString("boss.hurt-sound.sound", "ENTITY_WITHER_HURT"), Sound.ENTITY_WITHER_HURT);
         bossHurtSoundVolume = (float) config.getDouble("boss.hurt-sound.volume", 2.0);
         bossHurtSoundPitch = (float) config.getDouble("boss.hurt-sound.pitch", 0.1);
 
@@ -265,31 +255,39 @@ public class ConfigManager {
         healthPerIslandLevel = config.getDouble("boss.dynamic-stats.health-per-island-level", 5.0);
         healthPerIslandMember = config.getDouble("boss.dynamic-stats.health-per-island-member", 10.0);
 
-        try {
-            addShardSound = Sound.valueOf(config.getString("sounds.add-shard.sound", "ENTITY_ELDER_GUARDIAN_HURT").toUpperCase());
-        } catch (IllegalArgumentException e) {
-            addShardSound = Sound.ENTITY_ELDER_GUARDIAN_HURT;
-        }
+        addShardSound = sound(config.getString("sounds.add-shard.sound", "ENTITY_ELDER_GUARDIAN_HURT"), Sound.ENTITY_ELDER_GUARDIAN_HURT);
         addShardVolume = (float) config.getDouble("sounds.add-shard.volume", 1.0);
         addShardPitch = (float) config.getDouble("sounds.add-shard.pitch", 0.1);
 
-        try {
-            hatchingStartSound = Sound.valueOf(config.getString("sounds.hatching-start.sound", "ENTITY_ENDER_DRAGON_GROWL").toUpperCase());
-        } catch (IllegalArgumentException e) {
-            hatchingStartSound = Sound.ENTITY_ENDER_DRAGON_GROWL;
-        }
+        hatchingStartSound = sound(config.getString("sounds.hatching-start.sound", "ENTITY_ENDER_DRAGON_GROWL"), Sound.ENTITY_ENDER_DRAGON_GROWL);
         hatchingStartVolume = (float) config.getDouble("sounds.hatching-start.volume", 2.0);
         hatchingStartPitch = (float) config.getDouble("sounds.hatching-start.pitch", 0.1);
 
-        try {
-            countdownTickSound = Sound.valueOf(config.getString("sounds.countdown-tick.sound", "ENTITY_LIGHTNING_BOLT_THUNDER").toUpperCase());
-        } catch (IllegalArgumentException e) {
-            countdownTickSound = Sound.ENTITY_LIGHTNING_BOLT_THUNDER;
-        }
+        countdownTickSound = sound(config.getString("sounds.countdown-tick.sound", "ENTITY_LIGHTNING_BOLT_THUNDER"), Sound.ENTITY_LIGHTNING_BOLT_THUNDER);
         countdownTickVolume = (float) config.getDouble("sounds.countdown-tick.volume", 1.0);
         countdownTickPitch = (float) config.getDouble("sounds.countdown-tick.pitch", 0.1);
 
         islandPermissionName = config.getString("island-permission.name", "EGG_HATCH");
+    }
+
+    /** Son lu en config : ancien nom (ENTITY_PLAYER_LEVELUP) ou clé (minecraft:entity.player.levelup). */
+    private static Sound sound(String raw, Sound fallback) {
+        Sound parsed = parseSound(raw);
+        return parsed != null ? parsed : fallback;
+    }
+
+    private static Sound parseSound(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String s = raw.trim();
+        if (s.indexOf(':') >= 0 || s.indexOf('.') >= 0) {
+            NamespacedKey key = NamespacedKey.fromString(s.toLowerCase(Locale.ROOT));
+            return key == null ? null : Registry.SOUND_EVENT.get(key);
+        }
+        try {
+            return (Sound) Sound.class.getField(s.toUpperCase(Locale.ROOT)).get(null);
+        } catch (ReflectiveOperationException | ClassCastException e) {
+            return null;
+        }
     }
 
     private String loadString(String path) {

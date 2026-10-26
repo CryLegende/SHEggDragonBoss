@@ -24,7 +24,10 @@ import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -46,6 +49,8 @@ public class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        // Le clic est aussi signalé pour la main secondaire : l'éclat de la main principale serait compté deux fois
+        if (event.getHand() != EquipmentSlot.HAND) return;
         Block clickedBlock = event.getClickedBlock();
         if (clickedBlock == null || clickedBlock.getType() != Material.DRAGON_EGG) return;
         Player player = event.getPlayer();
@@ -152,6 +157,24 @@ public class PlayerListener implements Listener {
                 plugin.getLogger().warning("Erreur lors de l'exécution de la commande de mort du boss '" + command + "' : " + e.getMessage());
             }
         }
+    }
+
+    // Un boss sauvegardé avec son chunk n'a plus de contrôleur après un redémarrage ou un déchargement : on le reprend
+    // quand ses entités sont chargées (les mondes de PhantomWorlds arrivent après onEnable)
+    @EventHandler
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        List<LivingEntity> bosses = event.getEntities().stream()
+            .filter(e -> e instanceof LivingEntity && e.getPersistentDataContainer().has(SHEggDragonBoss.BOSS_KEY, PersistentDataType.BYTE))
+            .map(e -> (LivingEntity) e)
+            .toList();
+        if (bosses.isEmpty()) return;
+        // Un tick plus tard : les entités sont alors bien ajoutées au monde
+        Bukkit.getScheduler().runTask(plugin, () -> bosses.forEach(bossManager::adoptBoss));
+    }
+
+    @EventHandler
+    public void onWorldLoad(WorldLoadEvent event) {
+        bossManager.onWorldLoad(event.getWorld());
     }
 
     @EventHandler
