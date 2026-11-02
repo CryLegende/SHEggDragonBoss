@@ -5,15 +5,21 @@ import com.bgsoftware.superiorskyblock.api.island.Island;
 import com.bgsoftware.superiorskyblock.api.wrappers.SuperiorPlayer;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.Cry_Legende.sHEggDragonBoss.boss.BossController;
-import org.Cry_Legende.sHEggDragonBoss.hatching.HatchingProcess;
-import org.Cry_Legende.sHEggDragonBoss.tasks.HatchingTask;
+import org.Cry_Legende.sHEggDragonBoss.boss.BossType;
+import org.Cry_Legende.sHEggDragonBoss.boss.CreakingBossController;
+import org.Cry_Legende.sHEggDragonBoss.boss.DragonBossController;
+import org.Cry_Legende.sHEggDragonBoss.config.BossSettings;
+import org.Cry_Legende.sHEggDragonBoss.config.RitualSettings;
+import org.Cry_Legende.sHEggDragonBoss.ritual.RitualProcess;
+import org.Cry_Legende.sHEggDragonBoss.ritual.RitualTask;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Particle;
-import org.bukkit.Sound;
 import org.bukkit.World;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Creaking;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -26,13 +32,17 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Orchestre les rituels, les boss actifs et les boss dormants. Une île n'a jamais qu'un seul boss (de n'importe quel
+ * type) ou rituel en cours à la fois.
+ */
 public class BossManager {
 
     private final SHEggDragonBoss plugin;
     private final ConfigManager configManager;
     private final BossDataManager dataManager;
 
-    private final Map<Location, HatchingProcess> hatchingProcesses;
+    private final Map<Location, RitualProcess> ritualProcesses;
     private final Map<UUID, BossController> activeBosses;
     private final Map<UUID, BossDataManager.BossData> dormantBosses;
 
@@ -41,7 +51,7 @@ public class BossManager {
         this.configManager = plugin.getConfigManager();
         this.dataManager = new BossDataManager(plugin);
         this.activeBosses = new ConcurrentHashMap<>();
-        this.hatchingProcesses = dataManager.loadHatchingData();
+        this.ritualProcesses = dataManager.loadRitualData();
         this.dormantBosses = dataManager.loadDormantBosses();
 
         new DormantBossCheckerTask().runTaskTimer(plugin, 100L, 60L);
@@ -49,97 +59,133 @@ public class BossManager {
     }
 
     public void saveData() {
-        dataManager.saveHatchingData(hatchingProcesses);
+        dataManager.saveRitualData(ritualProcesses);
         dataManager.saveDormantBosses(dormantBosses);
     }
 
-    public void handleEggInteraction(Player player, Block eggBlock, boolean isShiftClick) {
-        Location eggLocation = eggBlock.getLocation();
-        Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(eggLocation);
-        if (isDragonActiveOnIsland(island)) {
-            player.sendMessage(configManager.getDragonActiveOnIsland());
+    // ------------------------------------------------------------------ rituels
+
+    public void handleRitualInteraction(RitualSettings ritual, Player player, Block ritualBlock, boolean isShiftClick) {
+        Location blockLocation = ritualBlock.getLocation();
+        Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(blockLocation);
+        if (isBusy(island)) {
+            send(player, configManager.common().bossAlreadyActive());
             return;
         }
-        HatchingProcess process = hatchingProcesses.computeIfAbsent(eggLocation, loc -> {
-            player.sendMessage(configManager.getStartHatching());
-            return new HatchingProcess(plugin, loc);
+        RitualProcess process = ritualProcesses.computeIfAbsent(blockLocation, loc -> {
+            send(player, ritual.startedMessage());
+            return new RitualProcess(plugin, ritual, loc);
         });
         if (process.isCountdownStarted()) {
-            player.sendMessage(configManager.getAlreadyHatching());
+            send(player, ritual.lockedMessage());
             return;
         }
         ItemStack itemInHand = player.getInventory().getItemInMainHand();
         int amountToAdd = isShiftClick ? itemInHand.getAmount() : 1;
-        int addedShards = process.addShards(amountToAdd, configManager.getRequiredShards());
-        if (addedShards > 0) {
-            itemInHand.setAmount(itemInHand.getAmount() - addedShards);
-            playAddShardEffect(eggLocation);
+        int added = process.addItems(amountToAdd);
+        if (added > 0) {
+            itemInHand.setAmount(itemInHand.getAmount() - added);
+            playAddItemEffect(process);
             saveData();
         }
-        process.updateHologram(configManager);
-        if (process.getCurrentShards() >= configManager.getRequiredShards()) {
+        process.updateHologram();
+        if (process.getCurrentItems() >= ritual.requiredAmount()) {
             startCountdown(process);
         }
     }
 
-    public boolean handleEggBreak(Location eggLocation) {
-        HatchingProcess process = hatchingProcesses.get(eggLocation);
+    /** Casse du bloc d'un rituel : refusée (faux) pendant le compte à rebours, sinon les objets donnés sont rendus. */
+    public boolean handleRitualBreak(Location blockLocation) {
+        RitualProcess process = ritualProcesses.get(blockLocation);
         if (process != null) {
             if (process.isCountdownStarted()) return false;
             process.destroy();
-            hatchingProcesses.remove(eggLocation);
-            if (process.getCurrentShards() > 0) {
-                eggLocation.getWorld().dropItemNaturally(eggLocation.clone().add(0.5, 1, 0.5), new ItemStack(configManager.getRequiredItem(), process.getCurrentShards()));
+            ritualProcesses.remove(blockLocation);
+            if (process.getCurrentItems() > 0) {
+                blockLocation.getWorld().dropItemNaturally(blockLocation.clone().add(0.5, 1, 0.5), new ItemStack(process.getRitual().item(), process.getCurrentItems()));
             }
             saveData();
         }
         return true;
     }
 
-    private void startCountdown(HatchingProcess process) {
+    /** Vrai si ce bloc est celui d'un rituel dont le compte à rebours est lancé. */
+    public boolean isRitualLocked(Location blockLocation) {
+        RitualProcess process = ritualProcesses.get(blockLocation);
+        return process != null && process.isCountdownStarted();
+    }
+
+    private void startCountdown(RitualProcess process) {
+        RitualSettings ritual = process.getRitual();
         process.setCountdownStarted(true);
-        process.startEggAnimation();
-        process.transformHologramForCountdown(configManager);
+        process.startBlockAnimation();
+        process.transformHologramForCountdown();
         Chunk chunk = process.getLocation().getChunk();
         chunk.getPersistentDataContainer().set(SHEggDragonBoss.CHUNK_LOAD_KEY, PersistentDataType.BYTE, (byte) 1);
         chunk.setForceLoaded(true);
-        Location loc = process.getLocation();
-        loc.getWorld().playSound(loc, configManager.getHatchingStartSound(), configManager.getHatchingStartVolume(), configManager.getHatchingStartPitch());
-        BukkitTask task = new HatchingTask(this, process, configManager).runTaskTimer(plugin, 0L, 1L);
+        ritual.sounds().start().play(process.getLocation());
+        BukkitTask task = new RitualTask(this, process).runTaskTimer(plugin, 0L, 1L);
         process.setTask(task);
     }
 
-    public void spawnBoss(HatchingProcess process) {
-        Location spawnLocation = process.getLocation().clone().add(0.5, 2.0, 0.5);
+    public void spawnBoss(RitualProcess process) {
+        RitualSettings ritual = process.getRitual();
+        Location spawnLocation = process.getLocation().clone().add(0.5, ritual.spawnOffsetY(), 0.5);
         Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(spawnLocation);
         process.destroy();
-        hatchingProcesses.remove(process.getLocation());
-        releaseHatchingChunk(process.getLocation());
+        ritualProcesses.remove(process.getLocation());
+        releaseRitualChunk(process.getLocation());
         saveData();
         if (island == null) {
             // Île supprimée pendant le compte à rebours : le contrôleur du boss en a besoin pour cibler les joueurs
             plugin.getLogger().warning("Éclosion annulée : plus d'île à " + spawnLocation.getBlockX() + " " + spawnLocation.getBlockY() + " " + spawnLocation.getBlockZ() + ".");
             return;
         }
-        double baseHealth = configManager.getBossHealth();
-        double dynamicHealth = 0;
-        if (configManager.isDynamicStatsEnabled()) {
-            dynamicHealth += island.getIslandLevel().doubleValue() * configManager.getHealthPerIslandLevel();
-            dynamicHealth += island.getIslandMembers(true).size() * configManager.getHealthPerIslandMember();
-        }
-        new BossController(plugin, this, island, spawnLocation, baseHealth + dynamicHealth, baseHealth + dynamicHealth, true);
+        double health = computeHealth(configManager.bossSettings(ritual.type()), island);
+        createController(ritual.type(), island, spawnLocation, health, health, 0, 0, BossController.StartMode.FIRST_SPAWN);
     }
+
+    /** PV du boss sur cette île : {@code base + par-niveau × niveau de l'île + par-membre × membres}. */
+    private double computeHealth(BossSettings settings, Island island) {
+        double health = settings.health();
+        if (settings.dynamicStats().enabled()) {
+            health += island.getIslandLevel().doubleValue() * settings.dynamicStats().healthPerIslandLevel();
+            health += island.getIslandMembers(true).size() * settings.dynamicStats().healthPerIslandMember();
+        }
+        return health;
+    }
+
+    private void createController(BossType type, Island island, Location location, double maxHealth, double currentHealth, int phase, int heartsLeft, BossController.StartMode mode) {
+        switch (type) {
+            case DRAGON -> DragonBossController.spawn(plugin, this, island, location, maxHealth, currentHealth, mode);
+            case CREAKING -> CreakingBossController.spawn(plugin, this, island, location, maxHealth, currentHealth, phase, heartsLeft, mode);
+        }
+    }
+
+    // ------------------------------------------------------------------ boss
 
     private void respawnDormantBoss(BossDataManager.BossData data) {
         Island island = SuperiorSkyblockAPI.getIslandByUUID(data.islandId());
         if (island == null) return;
-        new BossController(plugin, this, island, data.lastLocation(), data.maxHealth(), data.currentHealth(), false);
+        createController(data.type(), island, data.lastLocation(), data.maxHealth(), data.currentHealth(), data.phase(), data.heartsLeft(), BossController.StartMode.WOKEN_FROM_DORMANT);
     }
 
-    public void restoreBoss(Island island, LivingEntity boss) {
+    public void restoreBoss(Island island, LivingEntity boss, BossType type) {
         // Le boss est bien là : l'entrée "dormant" de cette île ne doit plus refaire apparaître un second boss
         dormantBosses.remove(island.getUniqueId());
-        new BossController(plugin, this, island, boss, boss.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getBaseValue());
+        AttributeInstance maxHealth = boss.getAttribute(Attribute.MAX_HEALTH);
+        double max = maxHealth != null ? maxHealth.getBaseValue() : boss.getHealth();
+        switch (type) {
+            case DRAGON -> DragonBossController.adopt(plugin, this, island, boss, max);
+            case CREAKING -> {
+                if (boss instanceof Creaking creaking) {
+                    CreakingBossController.adopt(plugin, this, island, creaking, max);
+                } else {
+                    plugin.getLogger().warning("Une entité marquée comme Creaking n'en est pas un (" + boss.getType() + ") : elle a été supprimée.");
+                    boss.remove();
+                }
+            }
+        }
     }
 
     /**
@@ -148,6 +194,12 @@ public class BossManager {
      */
     public void adoptBoss(LivingEntity boss) {
         if (!boss.isValid() || activeBosses.containsKey(boss.getUniqueId())) return;
+        BossType type = BossType.of(boss.getPersistentDataContainer());
+        if (type == null) {
+            // Écrit par une version plus récente du plugin : on n'y touche pas
+            plugin.getLogger().warning("Un boss de type inconnu a été trouvé à " + boss.getLocation().getBlockX() + " " + boss.getLocation().getBlockY() + " " + boss.getLocation().getBlockZ() + " : ignoré.");
+            return;
+        }
         Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(boss.getLocation());
         if (island == null) {
             plugin.getLogger().warning("Un boss a été trouvé en dehors d'une île et a été supprimé.");
@@ -156,7 +208,7 @@ public class BossManager {
             plugin.getLogger().warning("Un boss en double a été trouvé sur une île déjà occupée et a été supprimé.");
             boss.remove();
         } else {
-            restoreBoss(island, boss);
+            restoreBoss(island, boss, type);
         }
     }
 
@@ -164,13 +216,17 @@ public class BossManager {
         return activeBosses.size();
     }
 
+    public BossController getController(UUID bossId) {
+        return activeBosses.get(bossId);
+    }
+
     private boolean hasActiveBoss(Island island) {
         return activeBosses.values().stream().anyMatch(c -> c.getIsland().getUniqueId().equals(island.getUniqueId()));
     }
 
-    /** Active les données (éclosions, boss dormants) en attente d'un monde qui vient de se charger. */
+    /** Active les données (rituels, boss dormants) en attente d'un monde qui vient de se charger. */
     public void onWorldLoad(World world) {
-        hatchingProcesses.putAll(dataManager.resolveHatching(world));
+        ritualProcesses.putAll(dataManager.resolveRituals(world));
         dormantBosses.putAll(dataManager.resolveDormant(world));
     }
 
@@ -210,27 +266,33 @@ public class BossManager {
         }
     }
 
-    public boolean isDragonActiveOnIsland(Island island) {
+    /** Un boss en vie, un boss dormant ou un rituel en compte à rebours sur cette île : aucun autre rituel ne peut démarrer. */
+    public boolean isBusy(Island island) {
         if (island == null) return false;
-        return hasActiveBoss(island) || dormantBosses.containsKey(island.getUniqueId());
+        if (hasActiveBoss(island) || dormantBosses.containsKey(island.getUniqueId())) return true;
+        return ritualProcesses.values().stream().anyMatch(p -> {
+            if (!p.isCountdownStarted()) return false;
+            Island processIsland = SuperiorSkyblockAPI.getGrid().getIslandAt(p.getLocation());
+            return processIsland != null && processIsland.getUniqueId().equals(island.getUniqueId());
+        });
     }
 
-    public void cancelAllHatchingProcesses(boolean releaseChunks) {
-        for (HatchingProcess process : hatchingProcesses.values()) {
-            // Compte à rebours en cours : l'œuf avait été retiré du monde, on le remet pour qu'il ne soit pas perdu avec ses éclats
+    public void cancelAllRituals(boolean releaseChunks) {
+        for (RitualProcess process : ritualProcesses.values()) {
+            // Compte à rebours en cours : le bloc avait été retiré du monde, on le remet pour qu'il ne soit pas perdu avec ses objets
             if (process.isCountdownStarted() && process.getLocation().getBlock().getType() == Material.AIR) {
-                process.getLocation().getBlock().setType(Material.DRAGON_EGG);
+                process.getLocation().getBlock().setType(process.getRitual().block());
             }
             process.destroy();
-            if (releaseChunks) releaseHatchingChunk(process.getLocation());
+            if (releaseChunks) releaseRitualChunk(process.getLocation());
         }
-        hatchingProcesses.clear();
+        ritualProcesses.clear();
         activeBosses.values().forEach(BukkitRunnable::cancel);
         activeBosses.clear();
     }
 
     /** Libère le chunk forcé pendant le compte à rebours (sinon il reste chargé jusqu'au prochain redémarrage). */
-    private void releaseHatchingChunk(Location location) {
+    private void releaseRitualChunk(Location location) {
         // Chunk non chargé : il n'a pas pu être forcé, inutile de le charger pour rien
         if (location.getWorld() == null || !location.getWorld().isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) return;
         Chunk chunk = location.getChunk();
@@ -240,10 +302,15 @@ public class BossManager {
         }
     }
 
-    private void playAddShardEffect(Location location) {
-        World world = location.getWorld();
-        world.playSound(location, configManager.getAddShardSound(), configManager.getAddShardVolume(), configManager.getAddShardPitch());
-        world.spawnParticle(Particle.SCULK_SOUL, location.clone().add(0.5, 0.5, 0.5), 20, 0.5, 0.5, 0.5, 0.1);
+    private void playAddItemEffect(RitualProcess process) {
+        RitualSettings ritual = process.getRitual();
+        Location center = process.getLocation().clone().add(0.5, 0.5, 0.5);
+        ritual.sounds().addItem().play(process.getLocation());
+        ritual.particles().addItem().spawn(center);
+    }
+
+    private static void send(Player player, String message) {
+        if (message != null && !message.isEmpty()) player.sendMessage(message);
     }
 
     private class DormantBossCheckerTask extends BukkitRunnable {

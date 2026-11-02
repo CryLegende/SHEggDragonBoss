@@ -2,9 +2,11 @@ package org.Cry_Legende.sHEggDragonBoss;
 
 import com.bgsoftware.superiorskyblock.api.island.IslandPrivilege;
 import de.oliver.fancyholograms.api.FancyHologramsPlugin;
+import org.Cry_Legende.sHEggDragonBoss.listeners.HeartListener;
 import org.Cry_Legende.sHEggDragonBoss.listeners.PlayerListener;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.ConfigManager;
+import org.Cry_Legende.sHEggDragonBoss.managers.HeartManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.LogManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -22,11 +24,18 @@ public final class SHEggDragonBoss extends JavaPlugin {
     private static SHEggDragonBoss instance;
     private ConfigManager configManager;
     private BossManager bossManager;
+    private HeartManager heartManager;
     private FancyHologramsPlugin fancyHologramsPlugin;
     private LogManager logManager;
 
     public static NamespacedKey CHUNK_LOAD_KEY;
     public static NamespacedKey BOSS_KEY;
+    /** Type du boss (dragon, creaking) ; une entité sans cette clé est un dragon (boss créés avant le second boss). */
+    public static NamespacedKey BOSS_TYPE_KEY;
+    /** Creaking : nombre de phases d'invulnérabilité déjà déclenchées. */
+    public static NamespacedKey CREAKING_PHASE_KEY;
+    /** Creaking : cœurs qu'il reste à détruire dans la phase en cours. */
+    public static NamespacedKey CREAKING_HEARTS_KEY;
 
     /**
      * CORRECTION : Utilisation de onLoad() pour enregistrer la permission.
@@ -51,6 +60,9 @@ public final class SHEggDragonBoss extends JavaPlugin {
 
         CHUNK_LOAD_KEY = new NamespacedKey(this, "forced_chunk_load");
         BOSS_KEY = new NamespacedKey(this, "shegg_boss");
+        BOSS_TYPE_KEY = new NamespacedKey(this, "shegg_boss_type");
+        CREAKING_PHASE_KEY = new NamespacedKey(this, "shegg_creaking_phase");
+        CREAKING_HEARTS_KEY = new NamespacedKey(this, "shegg_creaking_hearts");
 
         if (!setupDependencies()) {
             getServer().getPluginManager().disablePlugin(this);
@@ -61,13 +73,15 @@ public final class SHEggDragonBoss extends JavaPlugin {
 
         // configManager.loadConfig(); <-- Déjà fait dans onLoad(), pas besoin de le refaire ici.
 
+        // Les cœurs du Creaking d'abord : un boss repris au démarrage peut en reposer
+        this.heartManager = new HeartManager(this);
         this.bossManager = new BossManager(this);
 
         cleanupAndRestoreState();
 
-        // Enregistrement du PlayerListener uniquement.
         // Le SuperiorListener a été supprimé car sa logique est maintenant dans onLoad.
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
+        getServer().getPluginManager().registerEvents(new HeartListener(heartManager), this);
 
         getLogger().info("SHEggDragonBoss a été activé avec succès !");
     }
@@ -76,7 +90,11 @@ public final class SHEggDragonBoss extends JavaPlugin {
     public void onDisable() {
         if (bossManager != null) {
             bossManager.saveData();
-            bossManager.cancelAllHatchingProcesses(true);
+            bossManager.cancelAllRituals(true);
+        }
+        // Après les boss : plus aucun cœur du Creaking ne doit rester posé dans les mondes
+        if (heartManager != null) {
+            heartManager.shutdown();
         }
         getLogger().info("SHEggDragonBoss a été désactivé.");
     }
@@ -169,6 +187,10 @@ public final class SHEggDragonBoss extends JavaPlugin {
 
     public BossManager getBossManager() {
         return bossManager;
+    }
+
+    public HeartManager getHeartManager() {
+        return heartManager;
     }
 
     public FancyHologramsPlugin getFancyHologramsPlugin() {

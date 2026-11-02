@@ -2,178 +2,553 @@
 #                Configuration de SHEggDragonBoss                 #
 # ----------------------------------------------------------------#
 #
-# Placeholders disponibles pour les messages et hologrammes:
-# {shards_current} - Le nombre actuel d'éclats dans l'oeuf.
-# {shards_required} - Le nombre total d'éclats requis.
-# {time} - Le temps restant dans le compte à rebours (en secondes).
-# {island} - Le nom de l'île où le boss apparaît.
+# Le plugin gère deux boss. Chacun est lancé par un rituel : clic droit sur un bloc avec un objet,
+# puis compte à rebours, puis apparition du boss.
+#   dragon   : bloc DRAGON_EGG + éclats d'écho  -> Phantom « Jeune Ender Dragon » qui poursuit les joueurs de l'île.
+#   creaking : bloc CREAKING_HEART + briques de résine -> Creaking à l'IA vanilla, invulnérable par phases
+#              tant qu'il reste des cœurs à détruire autour de lui.
+# Une île n'a jamais qu'un seul boss (n'importe lequel) ou rituel en cours à la fois.
 #
-# Vous pouvez utiliser les codes couleurs de Minecraft avec le symbole '&'.
-# Exemple: '&cMessage en rouge &l&navec du gras souligné.'
+# Organisation du fichier :
+#   messages          : textes envoyés aux joueurs (communs, puis par boss)
+#   rituals           : bloc, objet, quantité, compte à rebours, hologramme et animation de chaque rituel
+#   sounds            : sons de chaque rituel
+#   bosses            : réglages de combat de chaque boss
+#   island-permission : privilège d'île (SuperiorSkyblock2) nécessaire pour lancer un rituel
+#
+# Ce fichier est lu au démarrage du serveur (pas de rechargement à chaud).
+# Une clé absente ou une valeur invalide (matériau, son, particule, entité, effet inconnu...) produit un
+# avertissement dans la console et la valeur livrée avec le plugin est utilisée. Rien ne plante.
+#
+# Conventions :
+#   Couleurs      : codes Minecraft avec '&'. Exemple : '&cRouge &l&ngras souligné'.
+#   Messages      : préfixe « &7&l« &<couleur>&lSH &8&l» &7 », texte gris, mots importants en couleur.
+#                   Un message vide ("") n'est pas envoyé.
+#   Sons          : nom Bukkit (ENTITY_ENDER_DRAGON_GROWL) ou clé (minecraft:entity.ender_dragon.growl).
+#                   Chaque son a un volume (0 = muet, au-delà de 1 le son porte plus loin) et une hauteur
+#                   (pitch : 0.5 grave à 2.0 aigu). Un nom vide ("") désactive le son.
+#   Particules    : nom de particule Bukkit sans données (CLOUD, SCULK_SOUL...). BLOCK, DUST, ITEM... sont refusées.
+#                   Un nom vide ("") désactive l'effet. count = nombre, spread = dispersion en blocs, speed = vitesse.
+#   Durées        : en ticks (20 ticks = 1 seconde) quand la clé se termine par -ticks, sinon en secondes.
+#   Listes        : une liste vide s'écrit '[]'. Attention : une liste laissée sans valeur reprend la liste livrée.
 
+# ----------------------------------------------------------------#
+#                            MESSAGES                             #
+# ----------------------------------------------------------------#
 messages:
-  # Message envoyé quand un joueur n'a pas la permission (via SuperiorSkyblock2).
-  no-permission: "&7&l« &c&lSH &8&l» &7Vous n'avez pas la permission de faire cela sur cette île."
-  # Message si le bloc cliqué n'est pas dans le monde d'une île Skyblock.
-  not-on-island: ""
-  # Message affiché la première fois qu'un joueur donne un éclat à un oeuf.
-  start-hatching: "&7&l« &5&lSH &8&l» &7L'éclat d'écho provoque une réaction sur l'oeuf de dragon..."
-  # Message envoyé aux membres de l'île au début du compte à rebours.
-  countdown-start: "&7&l« &5&lSH &8&l» &7L'oeuf est sur le point d'éclore !"
-  # Message si l'on essaye d'interagir avec un oeuf dont le compte à rebours est lancé,
-  # ou si on essaye de le casser pendant ce temps.
-  already-hatching: "&7&l« &5&lSH &8&l» &7Cet oeuf est sur le point d'éclore et ne peut plus être touché !"
-  # Message si un joueur essaye de commencer un rituel alors qu'un boss est déjà en vie sur son île.
-  dragon-active-on-island: "&7&l« &c&lSH &8&l» &7Vous ne pouvez pas faire éclore un autre oeuf tant qu'un boss est en vie sur votre île !"
+  # Messages communs aux deux rituels.
+  common:
+    # Le joueur n'a pas le privilège d'île (voir island-permission).
+    no-permission: "&7&l« &c&lSH &8&l» &7Vous n'avez pas la permission de faire cela sur cette île."
+    # Le bloc cliqué n'est pas sur une île. Vide : aucun message.
+    not-on-island: ""
+    # Un boss (de n'importe quel type) est déjà en vie ou endormi sur l'île, ou un rituel est déjà en compte à rebours.
+    boss-already-active: "&7&l« &c&lSH &8&l» &7Vous ne pouvez pas lancer un autre rituel tant qu'un boss est en vie sur votre île !"
 
-  # Configuration des textes de l'hologramme de progression.
-  hologram-progress:
-    - "&d&lÉclosion de l'œuf"
-    - "&f{shards_current} &7/&f {shards_required} &dFragments"
+  # Boss n°1 : le dragon.
+  dragon:
+    # Premier éclat donné à l'œuf.
+    ritual-started: "&7&l« &5&lSH &8&l» &7L'éclat d'écho provoque une réaction sur l'oeuf de dragon..."
+    # Interaction ou casse de l'œuf pendant le compte à rebours.
+    ritual-locked: "&7&l« &5&lSH &8&l» &7Cet oeuf est sur le point d'éclore et ne peut plus être touché !"
 
-  # Configuration des textes de l'hologramme de compte à rebours.
-  hologram-countdown:
-    - "&c&lÉCLOSION IMMINENTE"
-    - "&e&l{time}"
+  # Boss n°2 : le Creaking.
+  # Placeholders du combat : {hearts} cœurs restants, {phase} phase en cours, {phases} nombre de phases,
+  # {player} joueur qui vient de briser un cœur (seulement dans heart-destroyed), {name} nom du boss.
+  creaking:
+    # Première brique de résine donnée au cœur.
+    ritual-started: "&7&l« &e&lSH &8&l» &7La résine réagit au &ecœur du Creaking&7..."
+    # Interaction ou casse du cœur pendant le compte à rebours.
+    ritual-locked: "&7&l« &c&lSH &8&l» &7Ce cœur est sur le point de s'éveiller et ne peut plus être touché !"
+    # Le boss passe sous un seuil de PV : il devient invulnérable et des cœurs apparaissent autour de lui.
+    shield-start: "&7&l« &6&lSH &8&l» &7Le Creaking devient &6invulnérable &7! Détruisez les &6{hearts} cœurs &7qui l'entourent."
+    # Un cœur est brisé et il en reste d'autres.
+    heart-destroyed: "&7&l« &e&lSH &8&l» &e{player} &7brise un cœur. Cœurs restants : &e{hearts}&7."
+    # Le dernier cœur est tombé : le boss peut de nouveau être blessé.
+    shield-end: "&7&l« &a&lSH &8&l» &7Le dernier cœur est tombé : le Creaking est de nouveau &avulnérable &7!"
 
-hologram-settings:
-  # La hauteur en blocs au-dessus de l'oeuf où l'hologramme apparaîtra.
-  height: 1.3
-  # Activer l'ombre portée sur le texte pour une meilleure lisibilité.
-  text-shadow: true
-  # La hauteur de l'hologramme PENDANT le compte à rebours.
-  countdown-height: 2.5
-  # La taille (échelle) de l'hologramme PENDANT le compte à rebours.
-  countdown-scale: 3.0
-
-hatching:
-  # L'item requis pour nourrir l'oeuf. Doit être un nom de matériau Spigot valide.
-  required-item: "ECHO_SHARD"
-  # Le nombre total d'items requis pour commencer le compte à rebours.
-  required-shards: 15
-  # La durée en secondes du compte à rebours final avant l'apparition du boss.
-  countdown-seconds: 10
-
-# Configuration du boss qui apparaîtra.
-boss:
-  entity-type: "PHANTOM"
-  name: "&5Jeune Ender Dragon"
-  bossbar-title: "{name} &7- &c&l{current_health} &4/ &c&l{max_health} &4❤"
-  health: 200.0
-  phantom-size: 7
-
-  # --- PARAMÈTRES DE COMBAT ---
-  attack-damage: 35.0
-  attack-cooldown-ticks: 40
-  movement-speed-multiplier: 2
-  stopping-distance: 2.5
-  armor: 20.0
-  armor-toughness: 5.0
-
-  # --- ATTAQUE À DISTANCE ---
-  ranged-attack:
+# ----------------------------------------------------------------#
+#                            RITUELS                              #
+# ----------------------------------------------------------------#
+# Un rituel : clic droit sur le bloc avec l'objet (Shift = toute la pile) jusqu'à la quantité requise.
+# Le bloc est alors consommé et un affichage du bloc grossit pendant le compte à rebours, puis le boss apparaît.
+# Casser le bloc avant le compte à rebours rend les objets donnés ; pendant le compte à rebours c'est refusé.
+#
+# Textes d'hologramme : {current} objets déjà donnés, {required} objets requis, {time} secondes restantes
+# (seulement dans countdown).
+rituals:
+  dragon:
+    # false : ce rituel est ignoré (le bloc redevient un bloc ordinaire).
     enabled: true
-    # Temps en ticks entre chaque boule de feu.
-    cooldown-ticks: 100
-    # Distance minimale (au carré) pour que le boss utilise cette attaque.
-    # 16.0 = 4 blocs. Le boss attaquera à distance si le joueur est plus loin que ça.
-    min-range-squared: 25.0
-    sound:
-      sound: "ENTITY_ENDER_DRAGON_SHOOT"
-      volume: 3.0
-      pitch: 1.0
+    # Bloc à cliquer. Nom de matériau valide. Deux rituels ne peuvent pas avoir le même bloc.
+    block: "DRAGON_EGG"
+    # Objet à donner. Nom de matériau valide.
+    item: "ECHO_SHARD"
+    # Nombre total d'objets requis pour lancer le compte à rebours (au moins 1).
+    required-amount: 15
+    # Durée du compte à rebours avant l'apparition du boss (au moins 1).
+    countdown-seconds: 10
+    # Hauteur, en blocs au-dessus du bloc, où le boss apparaît.
+    spawn-offset-y: 2.0
+    hologram:
+      # Début du nom de l'hologramme. Un nom différent par rituel (lettres, chiffres, _ . -).
+      name-prefix: "sHEDragon"
+      # Hauteur de l'hologramme au-dessus du bloc, avant le compte à rebours.
+      height: 1.3
+      # Ombre portée sur le texte pour une meilleure lisibilité.
+      text-shadow: true
+      # Hauteur et taille (échelle) de l'hologramme PENDANT le compte à rebours.
+      countdown-height: 2.5
+      countdown-scale: 3.0
+      # Texte avant le compte à rebours.
+      progress:
+        - "&d&lÉclosion de l'œuf"
+        - "&f{current} &7/&f {required} &dFragments"
+      # Texte pendant le compte à rebours.
+      countdown:
+        - "&c&lÉCLOSION IMMINENTE"
+        - "&e&l{time}"
+    # Animation du bloc pendant le compte à rebours.
+    animation:
+      # Taille ajoutée à la fin du compte à rebours (1.5 : le bloc passe de 1 à 2.5 fois sa taille).
+      growth: 1.5
+      # Hauteur maximale de lévitation, en blocs, atteinte à la fin.
+      levitation: 0.35
+      # Vitesse de l'oscillation de lévitation, en radians par tick.
+      levitation-speed: 0.125
+      # Tremblement du bloc (angle maximal en radians), de plus en plus fort jusqu'à la fin.
+      wobble: 0.2
+    particles:
+      # À chaque objet donné.
+      add-item:
+        particle: "SCULK_SOUL"
+        count: 20
+        spread: 0.5
+        speed: 0.1
+      # Pendant le compte à rebours, chaque tick. Le nombre grossit jusqu'à count × (1 + count-growth).
+      countdown:
+        particle: "PORTAL"
+        count: 10
+        count-growth: 4.0
+        spread: 0.8
+        speed: 0.1
 
-  # --- EFFETS D'APPARITION ---
-  spawn-explosion:
+  creaking:
     enabled: true
-    # La puissance de l'explosion (4.0 = TNT, 8.0 = Creeper chargé).
-    power: 10.0
-    # Si l'explosion doit créer du feu.
-    set-fire: true
-    # Si l'explosion doit casser les blocs.
-    break-blocks: false
+    block: "CREAKING_HEART"
+    item: "RESIN_BRICK"
+    required-amount: 10
+    countdown-seconds: 10
+    # Le Creaking apparaît à la place du bloc consommé.
+    spawn-offset-y: 0.0
+    hologram:
+      name-prefix: "sHECreaking"
+      height: 1.3
+      text-shadow: true
+      countdown-height: 2.5
+      countdown-scale: 3.0
+      progress:
+        - "&6&lRituel du Creaking"
+        - "&f{current} &7/&f {required} &6Briques de résine"
+      countdown:
+        - "&c&lÉVEIL IMMINENT"
+        - "&e&l{time}"
+    animation:
+      growth: 1.5
+      levitation: 0.35
+      levitation-speed: 0.125
+      wobble: 0.2
+    particles:
+      add-item:
+        particle: "FALLING_HONEY"
+        count: 15
+        spread: 0.4
+        speed: 0.0
+      countdown:
+        particle: "SCULK_SOUL"
+        count: 6
+        count-growth: 4.0
+        spread: 0.8
+        speed: 0.05
 
-  # --- SONS ---
-  spawn-sound:
-    sound: "ENTITY_ENDER_DRAGON_GROWL"
-    volume: 8.0
-    pitch: 2
-  ambient-sound:
-    sound: "ENTITY_ENDER_DRAGON_GROWL"
-    volume: 4.0
-    pitch: 2.0
-    delay: 3
-  death-sound:
-    sound: "ENTITY_WITHER_DEATH"
-    volume: 2.0
-    pitch: 0.5
-  hurt-sound:
-    sound: "ENTITY_WITHER_HURT"
-    volume: 2.0
-    pitch: 0.1
+# ----------------------------------------------------------------#
+#                             SONS                                #
+# ----------------------------------------------------------------#
+# Sons des rituels. add-item : un objet est donné. start : le compte à rebours démarre.
+# countdown-tick : chaque seconde du compte à rebours ; sa hauteur monte de pitch-growth jusqu'à la fin.
+sounds:
+  dragon:
+    add-item:
+      sound: "ENTITY_ELDER_GUARDIAN_HURT"
+      volume: 1.0
+      pitch: 0.1
+    start:
+      sound: "ENTITY_ENDER_DRAGON_GROWL"
+      volume: 2.0
+      pitch: 0.1
+    countdown-tick:
+      sound: "ENTITY_LIGHTNING_BOLT_THUNDER"
+      volume: 1.0
+      pitch: 0.1
+      pitch-growth: 1.0
+  creaking:
+    add-item:
+      sound: "BLOCK_RESIN_BRICKS_PLACE"
+      volume: 1.0
+      pitch: 0.8
+    start:
+      sound: "ENTITY_CREAKING_ACTIVATE"
+      volume: 2.0
+      pitch: 0.5
+    countdown-tick:
+      sound: "BLOCK_CREAKING_HEART_IDLE"
+      volume: 1.5
+      pitch: 0.6
+      pitch-growth: 0.8
 
-  # --- PARTICULES ---
-  particles:
-    ambient:
-      enabled: true
-      # Type de particule.
-      particle-type: "REVERSE_PORTAL"
-      count: 5
-      speed: 0.05
+# ----------------------------------------------------------------#
+#                             BOSS                                #
+# ----------------------------------------------------------------#
+bosses:
+  # ---------------------------------------------------------------
+  # Boss n°1 : le « Jeune Ender Dragon » (Phantom sans IA, déplacé par le plugin vers le joueur le plus proche).
+  # ---------------------------------------------------------------
+  dragon:
+    # Type de créature : une créature vivante invocable (PHANTOM).
+    entity-type: "PHANTOM"
+    name: "&5Jeune Ender Dragon"
+    # Barre de boss vue par les membres de l'île. Placeholders : {name}, {current_health}, {max_health}.
+    # color : PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE. style : SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20.
+    bossbar:
+      title: "{name} &7- &c&l{current_health} &4/ &c&l{max_health} &4❤"
+      color: "PURPLE"
+      style: "SOLID"
+    # PV de base. Les PV réels ajoutent dynamic-stats (voir plus bas).
+    health: 200.0
+    # Taille du Phantom.
+    phantom-size: 7
+
+    # --- COMBAT ---
+    # Dégâts de la frappe de près, distance maximale de la frappe (en blocs) et délai entre deux frappes.
+    attack-damage: 35.0
+    melee-range: 4.0
+    attack-cooldown-ticks: 40
+    # Vitesse de déplacement (1 = 0.1 bloc par tick) et distance d'arrêt près de la cible, en blocs.
+    movement-speed-multiplier: 2
+    stopping-distance: 2.5
+    # Causes de dégâts ignorées par le boss. Noms de EntityDamageEvent.DamageCause.
+    immune-damage-causes:
+      - SUFFOCATION
+      - ENTITY_EXPLOSION
+      - BLOCK_EXPLOSION
+
+    # --- ATTAQUE À DISTANCE (trois boules de feu du dragon) ---
     ranged-attack:
       enabled: true
-      particle-type: "EXPLOSION"
-      count: 1
+      # Temps en ticks entre chaque salve.
+      cooldown-ticks: 100
+      # Distance minimale (au carré) pour tirer : 25.0 = 5 blocs. Plus près, le boss frappe au corps à corps.
+      min-range-squared: 25.0
+      sound:
+        sound: "ENTITY_ENDER_DRAGON_SHOOT"
+        volume: 3.0
+        pitch: 1.0
+
+    # --- EFFETS D'APPARITION ---
+    spawn-explosion:
+      enabled: true
+      # Puissance (4.0 = TNT, 8.0 = Creeper chargé).
+      power: 10.0
+      set-fire: true
+      break-blocks: false
+
+    # --- SONS ---
+    spawn-sound:
+      sound: "ENTITY_ENDER_DRAGON_GROWL"
+      volume: 8.0
+      pitch: 2.0
+    # delay : secondes entre deux sons d'ambiance (au moins 1).
+    ambient-sound:
+      sound: "ENTITY_ENDER_DRAGON_GROWL"
+      volume: 4.0
+      pitch: 2.0
+      delay: 3
+    death-sound:
+      sound: "ENTITY_WITHER_DEATH"
+      volume: 2.0
+      pitch: 0.5
+    hurt-sound:
+      sound: "ENTITY_WITHER_HURT"
+      volume: 2.0
+      pitch: 0.1
+
+    # --- PARTICULES ---
+    particles:
+      # Autour du boss tant qu'il poursuit un joueur, toutes les interval-ticks ticks.
+      ambient:
+        enabled: true
+        particle: "REVERSE_PORTAL"
+        count: 5
+        speed: 0.05
+        interval-ticks: 4
+
+    # --- RÉCOMPENSES ---
+    rewards:
+      # Points d'expérience donnés au tueur, en une seule orbe.
+      xp-reward: 15000
+      # Objets lâchés à la mort du boss. Pour n'en lâcher aucun, écrire 'items: []'.
+      # Exemple d'objet personnalisé :
+      #   - material: "DIAMOND"
+      #     amount: 10
+      #     name: "&bFragment du Vide"
+      #     lore:
+      #       - "&7Un diamant imprégné de"
+      #       - "&7l'énergie du Phantom."
+      items:
+        - material: "PHANTOM_MEMBRANE"
+          amount: 1
+      # Commandes lancées par la console à la mort du boss (sans le '/' initial).
+      # Placeholders : {player} le tueur, {island} le nom de l'île (sinon de son propriétaire), {world}, {x}, {y}, {z}.
+      # Les commandes contenant {player} sont ignorées si le boss meurt sans tueur.
+      commands:
+        - "rc dragonegg-rewards {player}"
+
+    # PV dynamiques : PV de base + health-per-island-level × niveau de l'île + health-per-island-member × membres.
+    dynamic-stats:
+      enabled: true
+      health-per-island-level: 0.0005
+      health-per-island-member: 15.0
+
+  # ---------------------------------------------------------------
+  # Boss n°2 : le Creaking. IA vanilla active : il poursuit les joueurs, les frappe, et se fige quand un joueur
+  # le regarde (mécanique du jeu, pas du plugin). Quand ses PV passent sous un seuil, il devient invulnérable et des
+  # cœurs apparaissent autour de lui : tant qu'il en reste, il ne perd aucun PV. Il ne quitte jamais l'île.
+  # ---------------------------------------------------------------
+  creaking:
+    name: "&6Creaking Colossal"
+    # Barre de boss. Placeholders : {name}, {current_health}, {max_health} et, pendant une phase, {hearts}, {phase}, {phases}.
+    # La barre change de titre, de couleur et de style pendant une phase d'invulnérabilité (shield-*).
+    bossbar:
+      title: "{name} &7- &c&l{current_health} &4/ &c&l{max_health} &4❤"
+      color: "WHITE"
+      style: "SOLID"
+      shield-title: "{name} &7- &6&lINVULNÉRABLE &7- Cœurs restants : &c&l{hearts}"
+      shield-color: "RED"
+      shield-style: "SOLID"
+
+    # --- STATISTIQUES ---
+    # PV de base ; les PV réels ajoutent dynamic-stats : base + par niveau d'île × niveau + par membre × membres.
+    health: 800.0
+    dynamic-stats:
+      enabled: true
+      health-per-island-level: 0.0003
+      health-per-island-member: 20.0
+    # Dégâts de la frappe vanilla (corps à corps).
+    attack-damage: 18.0
+    # Vitesse de déplacement (attribut vanilla ; le Creaking vanilla marche à 0.4).
+    movement-speed: 0.4
+    # Armure (0 à 30) et robustesse (0 à 20) : réduisent les dégâts reçus comme pour un joueur.
+    armor: 8.0
+    armor-toughness: 2.0
+    # Résistance au recul, de 0 (aucune) à 1 (insensible).
+    knockback-resistance: 0.8
+    # Distance, en blocs, à laquelle il repère les joueurs.
+    follow-range: 40.0
+    # true : chaque seconde, si l'IA vanilla l'a laissé inactif alors qu'un joueur de l'île est là, le plugin
+    # l'éveille vers lui (Creaking#activate). Le gel quand on le regarde reste celui du jeu.
+    assist-activation: true
+    # Intervalle, en ticks, entre deux contrôles de l'arène et des attaques.
+    check-interval-ticks: 5
+    # Causes de dégâts ignorées par le boss. Noms de EntityDamageEvent.DamageCause.
+    immune-damage-causes:
+      - SUFFOCATION
+      - ENTITY_EXPLOSION
+      - BLOCK_EXPLOSION
+      - FIRE
+      - FIRE_TICK
+      - LAVA
+      - HOT_FLOOR
+
+    # --- ARÈNE ---
+    # Hors de l'île, ou à plus de max-depth-below-center blocs sous le centre de l'île (vide), le boss est ramené
+    # au centre de l'île, à recenter-offset-y blocs au-dessus.
+    arena:
+      max-depth-below-center: 30.0
+      recenter-offset-y: 1.0
+
+    # --- PHASES D'INVULNÉRABILITÉ ---
+    # Quand les PV passent sous health-percent % du maximum, le boss devient invulnérable et `hearts` cœurs
+    # apparaissent autour de lui. Quand le dernier tombe, il redevient vulnérable. Une phase par entrée,
+    # chaque phase ne se déclenche qu'une fois. health-percent est entre 0 et 100 exclus, hearts au moins 1.
+    # Pour n'avoir aucune phase, écrire 'phases: []'.
+    phases:
+      - health-percent: 66
+        hearts: 3
+      - health-percent: 33
+        hearts: 5
+
+    # --- CŒURS ---
+    # Blocs CREAKING_HEART posés par le plugin (non naturels : aucun Creaking vanilla n'en sort) sur des blocs d'air de l'île,
+    # dans la couche du boss, avec un bloc solide dessous quand c'est possible, sinon en l'air. Ils ne remplacent jamais un bloc.
+    # On les détruit en les frappant (clic gauche), sans casser le bloc : aucune protection d'île ne les bloque.
+    hearts:
+      # Nombre de coups pour détruire un cœur.
+      hits-to-break: 6
+      # Délai minimal entre deux coups d'un même joueur, en secondes (anti-spam).
+      hit-cooldown-seconds: 0.3
+      # Distance au boss, en blocs, entre min-distance et max-distance.
+      min-distance: 4.0
+      max-distance: 10.0
+      # Les cœurs sont posés à la hauteur du boss ± cette valeur, en blocs.
+      vertical-range: 3
+      # Distance minimale entre deux cœurs, en blocs.
+      min-spacing: 3.0
+      # Emplacements tirés au hasard avant d'abandonner, à chaque tentative.
+      placement-attempts: 200
+      # Tentatives supplémentaires (une par seconde) quand tous les cœurs n'ont pas pu être posés ;
+      # ensuite les cœurs manquants ne comptent plus dans la phase.
+      placement-retries: 10
+      place-sound:
+        sound: "BLOCK_CREAKING_HEART_SPAWN"
+        volume: 1.5
+        pitch: 1.0
+      place-particles:
+        particle: "SCULK_SOUL"
+        count: 20
+        spread: 0.4
+        speed: 0.05
+      # À chaque coup qui ne détruit pas le cœur.
+      hit-sound:
+        sound: "BLOCK_CREAKING_HEART_HURT"
+        volume: 1.0
+        pitch: 1.0
+      hit-particles:
+        particle: "CRIT"
+        count: 8
+        spread: 0.3
+        speed: 0.1
+      # Quand le cœur est détruit.
+      break-sound:
+        sound: "BLOCK_CREAKING_HEART_BREAK"
+        volume: 1.5
+        pitch: 1.0
+      break-particles:
+        particle: "POOF"
+        count: 20
+        spread: 0.4
+        speed: 0.05
+
+    # --- ATTAQUES DU PLUGIN ---
+    # Elles s'ajoutent à la frappe vanilla et ne dépendent pas du regard des joueurs. Elles touchent les joueurs
+    # de l'île qui sont dans le rayon. Une attaque sans joueur à portée ne consomme pas son délai.
+    # Pendant une phase d'invulnérabilité, le boss ne frappe plus qu'en mêlée vanille et lance l'onde de choc
+    # shield-frequency-factor fois plus souvent ; la résine suit during-shield.
+    attacks:
+      # Onde de choc : dégâts et recul pour les joueurs proches, avec un anneau de particules à la limite.
+      shockwave:
+        enabled: true
+        cooldown-ticks: 160
+        # Rayon en blocs.
+        radius: 6.0
+        # Dégâts (2 = un cœur).
+        damage: 10.0
+        # Recul : force horizontale (loin du boss) et verticale (vers le haut).
+        knockback-horizontal: 1.4
+        knockback-vertical: 0.6
+        # Pendant une phase, le délai est divisé par ce facteur (2 : deux fois plus souvent ; au moins 1).
+        shield-frequency-factor: 2.0
+        sound:
+          sound: "ENTITY_WARDEN_SONIC_BOOM"
+          volume: 1.5
+          pitch: 0.8
+        # count = nombre de points de l'anneau.
+        particles:
+          particle: "CLOUD"
+          count: 48
+          speed: 0.0
+      # Résine collante : effets de potion pour les joueurs proches.
+      resin:
+        enabled: true
+        cooldown-ticks: 240
+        radius: 8.0
+        # true : le boss lance aussi la résine pendant une phase d'invulnérabilité.
+        during-shield: false
+        # Effets appliqués. type : nom d'effet (SLOWNESS, MINING_FATIGUE...), amplifier : niveau - 1 (2 = niveau III),
+        # duration-ticks : durée en ticks (60 = 3 secondes).
+        effects:
+          - type: "SLOWNESS"
+            amplifier: 2
+            duration-ticks: 60
+          - type: "MINING_FATIGUE"
+            amplifier: 0
+            duration-ticks: 60
+        sound:
+          sound: "BLOCK_HONEY_BLOCK_PLACE"
+          volume: 1.5
+          pitch: 0.6
+        # Sur chaque joueur touché.
+        particles:
+          particle: "FALLING_HONEY"
+          count: 15
+          spread: 0.4
+          speed: 0.0
+
+    # --- SONS ET EFFETS ---
+    # Le Creaking garde ses sons vanilla ; ceux-ci s'y ajoutent. Un nom vide ("") désactive un son.
+    spawn-sound:
+      sound: "ENTITY_CREAKING_SPAWN"
+      volume: 3.0
+      pitch: 0.5
+    spawn-particles:
+      particle: "SCULK_SOUL"
+      count: 40
+      spread: 0.8
       speed: 0.1
+    death-sound:
+      sound: "BLOCK_CREAKING_HEART_BREAK"
+      volume: 2.0
+      pitch: 0.5
+    hurt-sound:
+      sound: ""
+      volume: 1.0
+      pitch: 1.0
+    # Le boss devient invulnérable.
+    shield-start-sound:
+      sound: "BLOCK_CREAKING_HEART_SPAWN"
+      volume: 3.0
+      pitch: 0.6
+    # Le boss redevient vulnérable.
+    shield-end-sound:
+      sound: "ENTITY_CREAKING_DEACTIVATE"
+      volume: 2.0
+      pitch: 0.8
+    # Un coup est reçu pendant l'invulnérabilité.
+    shield-blocked-sound:
+      sound: "BLOCK_RESIN_BRICKS_HIT"
+      volume: 1.0
+      pitch: 0.8
+    # Aura autour du boss tant qu'il est invulnérable, toutes les interval-ticks ticks.
+    shield-aura-particles:
+      particle: "WHITE_ASH"
+      count: 6
+      spread: 0.6
+      speed: 0.02
+      interval-ticks: 4
 
-  # --- RÉCOMPENSES ---
-  rewards:
-    # Le montant total d'XP à donner dans une seule orbe.
-    xp-reward: 15000
-    # Liste des items à donner à la mort du boss.
-    items:
-      - material: "PHANTOM_MEMBRANE"
-        amount: 1
-      # Exemple d'item plus complexe :
-      # - material: "DIAMOND"
-      #   amount: 10
-      #   name: "&bFragment du Vide"
-      #   lore:
-      #     - "&7Un diamant imprégné de"
-      #     - "&7l'énergie du Phantom."
+    # --- RÉCOMPENSES ---
+    rewards:
+      # Points d'expérience donnés au tueur, en une seule orbe.
+      xp-reward: 20000
+      # Objets lâchés à la mort (même format que le dragon). Aucun par défaut : les récompenses passent par la commande.
+      items:
+      # Commandes lancées par la console à la mort du boss (mêmes placeholders que le dragon).
+      commands:
+        - "rc creaking-rewards {player}"
 
-    # Commandes exécutées par la console à la mort du boss.
-    # Placeholders : {player} (le tueur), {island} (nom du propriétaire de l'île),
-    #                {world}, {x}, {y}, {z}
-    # Les commandes contenant {player} sont ignorées si le boss meurt sans tueur.
-    # Ne pas mettre le '/' au début.
-    commands:
-      - "rc dragonegg-rewards {player}"
-    # Exemple :
-    # commands:
-    #   - "eco give {player} 5000"
-    #   - "broadcast &d{player} &7a vaincu le boss de &d{island} &7!"
-
-  dynamic-stats:
-    enabled: true
-    health-per-island-level: 0.0005
-    health-per-island-member: 15.0
-
-sounds:
-  add-shard:
-    sound: "ENTITY_ELDER_GUARDIAN_HURT"
-    volume: 1.0
-    pitch: 0.1
-  hatching-start:
-    sound: "ENTITY_ENDER_DRAGON_GROWL"
-    volume: 2.0
-    pitch: 0.1
-  countdown-tick:
-    sound: "ENTITY_LIGHTNING_BOLT_THUNDER"
-    volume: 1.0
-    pitch: 0.1
-
-# Configuration de la permission personnalisée pour SuperiorSkyblock2.
+# ----------------------------------------------------------------#
+#                      PERMISSION D'ÎLE                           #
+# ----------------------------------------------------------------#
+# Privilège SuperiorSkyblock2 nécessaire pour lancer un rituel, le même pour les deux boss.
 island-permission:
-  # Le nom interne de la permission. NE PAS CHANGER après la première utilisation.
+  # Le nom interne du privilège. NE PAS CHANGER après la première utilisation.
   name: "EGG_HATCH"

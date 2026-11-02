@@ -5,12 +5,18 @@ import com.bgsoftware.superiorskyblock.api.island.Island;
 import com.bgsoftware.superiorskyblock.api.island.IslandPrivilege;
 import com.bgsoftware.superiorskyblock.api.wrappers.SuperiorPlayer;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
+import org.Cry_Legende.sHEggDragonBoss.boss.BossController;
+import org.Cry_Legende.sHEggDragonBoss.boss.BossType;
+import org.Cry_Legende.sHEggDragonBoss.boss.CreakingBossController;
+import org.Cry_Legende.sHEggDragonBoss.config.BossSettings;
+import org.Cry_Legende.sHEggDragonBoss.config.Rewards;
+import org.Cry_Legende.sHEggDragonBoss.config.RitualSettings;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.ConfigManager;
+import org.Cry_Legende.sHEggDragonBoss.managers.HeartManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -24,9 +30,9 @@ import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.WorldLoadEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -34,54 +40,85 @@ import org.bukkit.persistence.PersistentDataType;
 
 import java.util.List;
 
+/**
+ * Rituels (clic droit sur le bloc, casse du bloc) et vie des boss (dégâts, mort, reprise après redémarrage).
+ * Les deux boss passent par les mêmes gestionnaires ; seul le Creaking a une logique en plus (invulnérabilité de phase).
+ */
 public class PlayerListener implements Listener {
 
     private final SHEggDragonBoss plugin;
     private final BossManager bossManager;
+    private final HeartManager heartManager;
     private final ConfigManager configManager;
 
     public PlayerListener(SHEggDragonBoss plugin) {
         this.plugin = plugin;
         this.bossManager = plugin.getBossManager();
+        this.heartManager = plugin.getHeartManager();
         this.configManager = plugin.getConfigManager();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-        // Le clic est aussi signalé pour la main secondaire : l'éclat de la main principale serait compté deux fois
+        // Le clic est aussi signalé pour la main secondaire : l'objet de la main principale serait compté deux fois
         if (event.getHand() != EquipmentSlot.HAND) return;
         Block clickedBlock = event.getClickedBlock();
-        if (clickedBlock == null || clickedBlock.getType() != Material.DRAGON_EGG) return;
+        if (clickedBlock == null) return;
+        RitualSettings ritual = configManager.ritualForBlock(clickedBlock.getType());
+        if (ritual == null) return;
+        // Un cœur de combat est un bloc du même type que le cœur du rituel du Creaking, mais n'est pas un autel
+        if (heartManager.isHeart(clickedBlock)) return;
         Player player = event.getPlayer();
-        if (player.getInventory().getItemInMainHand().getType() != configManager.getRequiredItem()) return;
+        if (player.getInventory().getItemInMainHand().getType() != ritual.item()) return;
 
         event.setCancelled(true);
         SuperiorPlayer superiorPlayer = SuperiorSkyblockAPI.getPlayer(player);
         Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(clickedBlock.getLocation());
 
         if (island == null) {
-            player.sendMessage(configManager.getNotOnIsland());
+            send(player, configManager.common().notOnIsland());
             return;
         }
 
-        // CORRECTION : Logique de permission restaurée, conforme à l'API.
-        IslandPrivilege eggHatchPrivilege = IslandPrivilege.getByName(configManager.getIslandPermissionName());
-        if (eggHatchPrivilege == null || !island.hasPermission(superiorPlayer, eggHatchPrivilege)) {
-            player.sendMessage(configManager.getNoPermission());
+        // Même privilège d'île pour tous les rituels
+        IslandPrivilege privilege = IslandPrivilege.getByName(configManager.getIslandPermissionName());
+        if (privilege == null || !island.hasPermission(superiorPlayer, privilege)) {
+            send(player, configManager.common().noPermission());
             return;
         }
 
-        bossManager.handleEggInteraction(player, clickedBlock, player.isSneaking());
+        bossManager.handleRitualInteraction(ritual, player, clickedBlock, player.isSneaking());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
-        if (block.getType() != Material.DRAGON_EGG) return;
-        if (!bossManager.handleEggBreak(block.getLocation())) {
+        RitualSettings ritual = configManager.ritualForBlock(block.getType());
+        if (ritual == null) return;
+        // Les cœurs de combat sont protégés par HeartListener, pas par le rituel
+        if (heartManager.isHeart(block)) return;
+        if (!bossManager.handleRitualBreak(block.getLocation())) {
             event.setCancelled(true);
-            event.getPlayer().sendMessage(configManager.getAlreadyHatching());
+            send(event.getPlayer(), ritual.lockedMessage());
+        }
+    }
+
+    /** Dégâts reçus par un boss : causes ignorées, puis invulnérabilité de phase du Creaking. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBossDamageFilter(EntityDamageEvent event) {
+        Entity entity = event.getEntity();
+        if (!entity.getPersistentDataContainer().has(SHEggDragonBoss.BOSS_KEY, PersistentDataType.BYTE)) return;
+        BossType type = BossType.of(entity.getPersistentDataContainer());
+        if (type == null) return;
+        BossSettings settings = configManager.bossSettings(type);
+        if (settings.immuneCauses().contains(event.getCause())) {
+            event.setCancelled(true);
+            return;
+        }
+        if (type == BossType.CREAKING && bossManager.getController(entity.getUniqueId()) instanceof CreakingBossController creaking
+            && creaking.absorbDamage(event)) {
+            event.setCancelled(true);
         }
     }
 
@@ -89,6 +126,9 @@ public class PlayerListener implements Listener {
     public void onBossDeath(EntityDeathEvent event) {
         LivingEntity entity = event.getEntity();
         if (!entity.getPersistentDataContainer().has(SHEggDragonBoss.BOSS_KEY, PersistentDataType.BYTE)) return;
+        BossType type = BossType.of(entity.getPersistentDataContainer());
+        if (type == null) return;
+        BossSettings settings = configManager.bossSettings(type);
 
         bossManager.handleBossDeath(entity);
         Location loc = entity.getLocation();
@@ -96,17 +136,23 @@ public class PlayerListener implements Listener {
 
         Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(loc);
         String islandName = (island != null && island.getOwner() != null) ? "l'île de " + island.getOwner().getName() : "une île inconnue";
-        plugin.getLogManager().log(String.format("Le boss sur %s a été tué par %s.", islandName, (killer != null ? killer.getName() : "Cause inconnue")));
+        String killerName = killer != null ? killer.getName() : "Cause inconnue";
+        if (type == BossType.CREAKING) {
+            plugin.getLogManager().log(String.format("Le boss Creaking sur %s a été tué par %s.", islandName, killerName));
+        } else {
+            plugin.getLogManager().log(String.format("Le boss sur %s a été tué par %s.", islandName, killerName));
+        }
 
-        loc.getWorld().playSound(loc, configManager.getBossDeathSound(), configManager.getBossDeathSoundVolume(), configManager.getBossDeathSoundPitch());
+        settings.deathSound().play(loc);
         event.getDrops().clear();
         event.setDroppedExp(0);
 
-        if (killer != null && configManager.getXpReward() > 0) {
-            killer.giveExp(configManager.getXpReward());
+        Rewards rewards = settings.rewards();
+        if (killer != null && rewards.xp() > 0) {
+            killer.giveExp(rewards.xp());
         }
 
-        for (ConfigManager.ItemReward reward : configManager.getItemRewards()) {
+        for (Rewards.ItemReward reward : rewards.items()) {
             ItemStack itemStack = new ItemStack(reward.material(), reward.amount());
             if (reward.name() != null || !reward.lore().isEmpty()) {
                 ItemMeta meta = itemStack.getItemMeta();
@@ -119,11 +165,10 @@ public class PlayerListener implements Listener {
             loc.getWorld().dropItemNaturally(loc, itemStack);
         }
 
-        executeDeathCommands(killer, island, loc);
+        executeDeathCommands(rewards.commands(), killer, island, loc);
     }
 
-    private void executeDeathCommands(Player killer, Island island, Location loc) {
-        List<String> commands = configManager.getDeathCommands();
+    private void executeDeathCommands(List<String> commands, Player killer, Island island, Location loc) {
         if (commands.isEmpty()) return;
 
         String islandDisplay = "";
@@ -188,11 +233,8 @@ public class PlayerListener implements Listener {
     public void onBossDamage(EntityDamageEvent event) {
         if (!event.getEntity().getPersistentDataContainer().has(SHEggDragonBoss.BOSS_KEY, PersistentDataType.BYTE))
             return;
-        EntityDamageEvent.DamageCause cause = event.getCause();
-        if (cause == EntityDamageEvent.DamageCause.SUFFOCATION || cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION || cause == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION) {
-            event.setCancelled(true);
-            return;
-        }
+        BossType type = BossType.of(event.getEntity().getPersistentDataContainer());
+        if (type == null) return;
 
         if (event instanceof EntityDamageByEntityEvent byEntityEvent) {
             if (byEntityEvent.getDamager() instanceof Player attacker) {
@@ -204,8 +246,11 @@ public class PlayerListener implements Listener {
         }
 
         if (event.getFinalDamage() > 0) {
-            Location loc = event.getEntity().getLocation();
-            loc.getWorld().playSound(loc, configManager.getBossHurtSound(), configManager.getBossHurtSoundVolume(), configManager.getBossHurtSoundPitch());
+            configManager.bossSettings(type).hurtSound().play(event.getEntity().getLocation());
         }
+    }
+
+    private static void send(Player player, String message) {
+        if (message != null && !message.isEmpty()) player.sendMessage(message);
     }
 }

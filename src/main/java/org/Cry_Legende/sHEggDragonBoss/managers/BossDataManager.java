@@ -1,10 +1,11 @@
 package org.Cry_Legende.sHEggDragonBoss.managers;
 
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
-import org.Cry_Legende.sHEggDragonBoss.hatching.HatchingProcess; // IMPORT AJOUTÉ
+import org.Cry_Legende.sHEggDragonBoss.boss.BossType;
+import org.Cry_Legende.sHEggDragonBoss.config.RitualSettings;
+import org.Cry_Legende.sHEggDragonBoss.ritual.RitualProcess;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -19,23 +20,29 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Données persistantes : rituels en cours (hatching-data.yml) et boss dormants (dormant-bosses.yml).
+ * Le champ {@code type} (dragon, creaking) est facultatif : son absence signifie « dragon », comme dans les fichiers
+ * écrits avant l'arrivée du second boss.
+ */
 public class BossDataManager {
 
-    public record BossData(UUID islandId, Location lastLocation, double currentHealth, double maxHealth) {
+    /** Un boss dormant ; {@code phase} et {@code heartsLeft} ne servent qu'au Creaking (0 pour le dragon). */
+    public record BossData(UUID islandId, BossType type, Location lastLocation, double currentHealth, double maxHealth, int phase, int heartsLeft) {
     }
 
-    // Entrées dont le monde n'est pas encore chargé (PhantomWorlds en charge après onEnable) : gardées telles quelles,
-    // réécrites à chaque sauvegarde, et activées au chargement du monde (WorldLoadEvent)
-    private record PendingHatching(String location, int shards) {
+    // Entrées dont le monde n'est pas encore chargé (PhantomWorlds en charge après onEnable) ou dont le rituel est désactivé :
+    // gardées telles quelles, réécrites à chaque sauvegarde, et activées au chargement du monde (WorldLoadEvent)
+    private record PendingRitual(String type, String location, int items) {
     }
 
-    private record PendingDormant(UUID islandId, String location, double currentHealth, double maxHealth) {
+    private record PendingDormant(UUID islandId, String type, String location, double currentHealth, double maxHealth, int phase, int heartsLeft) {
     }
 
     private final SHEggDragonBoss plugin;
     private final File hatchingDataFile;
     private final File dormantBossesFile;
-    private final List<PendingHatching> pendingHatching = new ArrayList<>();
+    private final List<PendingRitual> pendingRituals = new ArrayList<>();
     private final List<PendingDormant> pendingDormant = new ArrayList<>();
 
     public BossDataManager(SHEggDragonBoss plugin) {
@@ -44,60 +51,76 @@ public class BossDataManager {
         this.dormantBossesFile = new File(plugin.getDataFolder(), "dormant-bosses.yml");
     }
 
-    public Map<Location, HatchingProcess> loadHatchingData() {
-        Map<Location, HatchingProcess> processes = new ConcurrentHashMap<>();
+    public Map<Location, RitualProcess> loadRitualData() {
+        Map<Location, RitualProcess> processes = new ConcurrentHashMap<>();
         if (!hatchingDataFile.exists()) return processes;
         FileConfiguration config = YamlConfiguration.loadConfiguration(hatchingDataFile);
         ConfigurationSection section = config.getConfigurationSection("hatching-processes");
         if (section == null) return processes;
         for (String key : section.getKeys(false)) {
             String raw = section.getString(key + ".location");
-            int shards = section.getInt(key + ".shards");
+            String type = section.getString(key + ".type", BossType.DRAGON.id());
+            int items = section.getInt(key + ".shards");
             Location loc = deserializeLocation(raw);
             if (loc == null) continue;
             if (loc.getWorld() == null) {
-                pendingHatching.add(new PendingHatching(raw, shards));
+                pendingRituals.add(new PendingRitual(type, raw, items));
                 continue;
             }
-            addHatching(processes, loc, shards);
+            if (!addRitual(processes, type, loc, items)) pendingRituals.add(new PendingRitual(type, raw, items));
         }
         return processes;
     }
 
-    private void addHatching(Map<Location, HatchingProcess> processes, Location loc, int shards) {
-        if (loc.getBlock().getType() != Material.DRAGON_EGG) return;
-        HatchingProcess process = new HatchingProcess(plugin, loc);
-        process.setCurrentShards(shards);
-        process.updateHologram(plugin.getConfigManager());
+    /**
+     * Recrée un rituel sauvegardé. Renvoie faux quand l'entrée doit rester en attente (type inconnu ou rituel désactivé) ;
+     * un bloc qui n'est plus là est simplement abandonné, comme avant.
+     */
+    private boolean addRitual(Map<Location, RitualProcess> processes, String typeId, Location loc, int items) {
+        BossType type = BossType.fromId(typeId);
+        RitualSettings ritual = type == null ? null : plugin.getConfigManager().ritual(type);
+        if (ritual == null || !ritual.enabled()) {
+            plugin.getLogger().warning("Rituel '" + typeId + "' en " + serializeLocation(loc) + " conservé tel quel : ce rituel est inconnu ou désactivé.");
+            return false;
+        }
+        if (loc.getBlock().getType() != ritual.block()) return true;
+        RitualProcess process = new RitualProcess(plugin, ritual, loc);
+        process.setCurrentItems(items);
+        process.updateHologram();
         processes.put(loc, process);
+        return true;
     }
 
-    /** Active les éclosions en attente d'un monde qui vient de se charger. */
-    public Map<Location, HatchingProcess> resolveHatching(World world) {
-        Map<Location, HatchingProcess> processes = new ConcurrentHashMap<>();
-        Iterator<PendingHatching> it = pendingHatching.iterator();
+    /** Active les rituels en attente d'un monde qui vient de se charger. */
+    public Map<Location, RitualProcess> resolveRituals(World world) {
+        Map<Location, RitualProcess> processes = new ConcurrentHashMap<>();
+        List<PendingRitual> kept = new ArrayList<>();
+        Iterator<PendingRitual> it = pendingRituals.iterator();
         while (it.hasNext()) {
-            PendingHatching pending = it.next();
+            PendingRitual pending = it.next();
             if (!worldName(pending.location()).equalsIgnoreCase(world.getName())) continue;
             it.remove();
             Location loc = deserializeLocation(pending.location());
-            if (loc != null && loc.getWorld() != null) addHatching(processes, loc, pending.shards());
+            if (loc != null && loc.getWorld() != null && !addRitual(processes, pending.type(), loc, pending.items())) kept.add(pending);
         }
+        pendingRituals.addAll(kept);
         return processes;
     }
 
-    public void saveHatchingData(Map<Location, HatchingProcess> processes) {
+    public void saveRitualData(Map<Location, RitualProcess> processes) {
         FileConfiguration config = new YamlConfiguration();
         int i = 0;
-        for (Map.Entry<Location, HatchingProcess> entry : processes.entrySet()) {
+        for (Map.Entry<Location, RitualProcess> entry : processes.entrySet()) {
             String path = "hatching-processes." + i++;
+            config.set(path + ".type", entry.getValue().getRitual().type().id());
             config.set(path + ".location", serializeLocation(entry.getKey()));
-            config.set(path + ".shards", entry.getValue().getCurrentShards());
+            config.set(path + ".shards", entry.getValue().getCurrentItems());
         }
-        for (PendingHatching pending : pendingHatching) {
+        for (PendingRitual pending : pendingRituals) {
             String path = "hatching-processes." + i++;
+            config.set(path + ".type", pending.type());
             config.set(path + ".location", pending.location());
-            config.set(path + ".shards", pending.shards());
+            config.set(path + ".shards", pending.items());
         }
         try {
             config.save(hatchingDataFile);
@@ -115,16 +138,24 @@ public class BossDataManager {
         for (String key : section.getKeys(false)) {
             try {
                 UUID islandId = UUID.fromString(key);
+                String typeId = section.getString(key + ".type", BossType.DRAGON.id());
+                BossType type = BossType.fromId(typeId);
+                if (type == null) {
+                    plugin.getLogger().warning("Boss dormant ignoré (île " + key + ") : type inconnu '" + typeId + "'.");
+                    continue;
+                }
                 String raw = section.getString(key + ".location");
                 Location loc = deserializeLocation(raw);
                 if (loc == null) continue;
                 double currentHealth = section.getDouble(key + ".current-health");
                 double maxHealth = section.getDouble(key + ".max-health");
+                int phase = section.getInt(key + ".phase");
+                int heartsLeft = section.getInt(key + ".hearts-left");
                 if (loc.getWorld() == null) {
-                    pendingDormant.add(new PendingDormant(islandId, raw, currentHealth, maxHealth));
+                    pendingDormant.add(new PendingDormant(islandId, type.id(), raw, currentHealth, maxHealth, phase, heartsLeft));
                     continue;
                 }
-                bosses.put(islandId, new BossData(islandId, loc, currentHealth, maxHealth));
+                bosses.put(islandId, new BossData(islandId, type, loc, currentHealth, maxHealth, phase, heartsLeft));
             } catch (Exception e) {
                 plugin.getLogger().warning("Erreur au chargement d'un boss dormant: " + e.getMessage());
             }
@@ -142,8 +173,9 @@ public class BossDataManager {
             if (!worldName(pending.location()).equalsIgnoreCase(world.getName())) continue;
             it.remove();
             Location loc = deserializeLocation(pending.location());
-            if (loc != null && loc.getWorld() != null) {
-                bosses.put(pending.islandId(), new BossData(pending.islandId(), loc, pending.currentHealth(), pending.maxHealth()));
+            BossType type = BossType.fromId(pending.type());
+            if (loc != null && loc.getWorld() != null && type != null) {
+                bosses.put(pending.islandId(), new BossData(pending.islandId(), type, loc, pending.currentHealth(), pending.maxHealth(), pending.phase(), pending.heartsLeft()));
             }
         }
         return bosses;
@@ -156,22 +188,29 @@ public class BossDataManager {
                 BossData data = entry.getValue();
                 String location = serializeLocation(data.lastLocation());
                 if (location.isEmpty()) continue; // position inconnue : rien d'exploitable à écrire
-                String path = "dormant-bosses." + entry.getKey().toString();
-                config.set(path + ".location", location);
-                config.set(path + ".current-health", data.currentHealth());
-                config.set(path + ".max-health", data.maxHealth());
+                writeDormant(config, entry.getKey(), data.type().id(), location, data.currentHealth(), data.maxHealth(), data.phase(), data.heartsLeft());
             }
         }
         for (PendingDormant pending : pendingDormant) {
-            String path = "dormant-bosses." + pending.islandId();
-            config.set(path + ".location", pending.location());
-            config.set(path + ".current-health", pending.currentHealth());
-            config.set(path + ".max-health", pending.maxHealth());
+            writeDormant(config, pending.islandId(), pending.type(), pending.location(), pending.currentHealth(), pending.maxHealth(), pending.phase(), pending.heartsLeft());
         }
         try {
             config.save(dormantBossesFile);
         } catch (IOException e) {
             plugin.getLogger().severe("Impossible de sauvegarder les données des boss dormants !");
+        }
+    }
+
+    private static void writeDormant(FileConfiguration config, UUID islandId, String type, String location, double currentHealth, double maxHealth, int phase, int heartsLeft) {
+        String path = "dormant-bosses." + islandId;
+        config.set(path + ".type", type);
+        config.set(path + ".location", location);
+        config.set(path + ".current-health", currentHealth);
+        config.set(path + ".max-health", maxHealth);
+        // Phase et cœurs restants : seulement pour le boss qui en a
+        if (phase > 0 || heartsLeft > 0) {
+            config.set(path + ".phase", phase);
+            config.set(path + ".hearts-left", heartsLeft);
         }
     }
 

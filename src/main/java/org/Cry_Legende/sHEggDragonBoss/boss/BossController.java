@@ -1,29 +1,26 @@
 package org.Cry_Legende.sHEggDragonBoss.boss;
 
-import org.bukkit.World;
-import com.bgsoftware.superiorskyblock.api.world.Dimension;
 import com.bgsoftware.superiorskyblock.api.island.Island;
+import com.bgsoftware.superiorskyblock.api.world.Dimension;
 import com.bgsoftware.superiorskyblock.api.wrappers.SuperiorPlayer;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossDataManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.ConfigManager;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.attribute.Attribute;
-import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.World;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
-import org.bukkit.entity.DragonFireball;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Phantom;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -31,54 +28,90 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class BossController extends BukkitRunnable {
+/**
+ * Ce que partagent les deux boss : le tick, la cible, la barre de boss, la sauvegarde « dormant » et le journal.
+ * Chaque type de boss ajoute son comportement dans {@link #onTick()} et {@link #onSecond()}.
+ */
+public abstract class BossController extends BukkitRunnable {
 
-    private final ConfigManager configManager;
-    private final Island island;
-    private final LivingEntity boss;
-    private final BossBar bossBar;
-    private final double maxHealth;
+    /** Pourquoi le contrôleur démarre : première apparition, réveil d'un boss dormant ou reprise après redémarrage. */
+    public enum StartMode {
+        FIRST_SPAWN,
+        WOKEN_FROM_DORMANT,
+        RESTORED
+    }
 
-    private Player target;
-    private Player externalTarget;
-    private int tickCounter = 0;
-    private long lastRangedAttackTick = 0;
-    private long lastMeleeAttackTick = 0;
+    protected final SHEggDragonBoss plugin;
+    protected final BossManager bossManager;
+    protected final ConfigManager configManager;
+    protected final Island island;
+    protected final LivingEntity boss;
+    protected final BossBar bossBar;
+    protected final double maxHealth;
+
+    protected Player target;
+    protected Player externalTarget;
+    protected int tickCounter = 0;
 
     private Location lastKnownLocation;
     private double lastKnownHealth;
+    private BarColor shownColor;
+    private BarStyle shownStyle;
 
-    public BossController(SHEggDragonBoss plugin, BossManager bossManager, Island island, Location spawnLocation, double maxHealth, double currentHealth, boolean isFirstSpawn) {
+    protected BossController(SHEggDragonBoss plugin, BossManager bossManager, Island island, LivingEntity boss, double maxHealth,
+                             String initialTitle, BarColor color, BarStyle style) {
+        this.plugin = plugin;
+        this.bossManager = bossManager;
         this.configManager = plugin.getConfigManager();
         this.island = island;
+        this.boss = boss;
         this.maxHealth = maxHealth;
-        this.boss = createBossEntity(spawnLocation, maxHealth, currentHealth);
-        this.bossBar = createBossBar();
+        this.bossBar = Bukkit.createBossBar(initialTitle, color, style);
+        this.shownColor = color;
+        this.shownStyle = style;
         this.lastKnownLocation = boss.getLocation();
         this.lastKnownHealth = boss.getHealth();
-
-        String islandName = (island != null && island.getOwner() != null) ? "l'île de " + island.getOwner().getName() : "une île inconnue";
-        if (isFirstSpawn) {
-            playSpawnEffects();
-            plugin.getLogManager().log(String.format("Un boss est apparu sur %s (Vie: %.1f/%.1f).", islandName, currentHealth, maxHealth));
-        } else {
-            plugin.getLogManager().log(String.format("Un boss dormant a été réveillé sur %s (Vie: %.1f/%.1f).", islandName, currentHealth, maxHealth));
-        }
-
-        bossManager.registerActiveBoss(this);
-        this.runTaskTimer(plugin, 0L, 1L);
     }
 
-    public BossController(SHEggDragonBoss plugin, BossManager bossManager, Island island, LivingEntity existingBoss, double maxHealth) {
-        this.configManager = plugin.getConfigManager();
-        this.island = island;
-        this.maxHealth = maxHealth;
-        this.boss = existingBoss;
-        this.bossBar = createBossBar();
-        this.lastKnownLocation = boss.getLocation();
-        this.lastKnownHealth = boss.getHealth();
-        String islandName = (island != null && island.getOwner() != null) ? "l'île de " + island.getOwner().getName() : "une île inconnue";
-        plugin.getLogManager().log(String.format("Un boss a été restauré sur %s après un redémarrage.", islandName));
+    // ------------------------------------------------------------------ à fournir par chaque boss
+
+    public abstract BossType type();
+
+    /** Titre de la barre de boss à l'instant présent (placeholders déjà remplacés). */
+    protected abstract String barTitle();
+
+    protected abstract BarColor barColor();
+
+    protected abstract BarStyle barStyle();
+
+    /** Effets d'apparition et journal ; appelé juste avant l'enregistrement du contrôleur. */
+    protected abstract void onStart(StartMode mode);
+
+    /** Appelé à chaque tick, après la mise à jour de la cible et de la barre (une fois par seconde). */
+    protected abstract void onTick();
+
+    /** Appelé une fois par seconde (tick 20, 40...). */
+    protected void onSecond() {
+    }
+
+    /** Appelé à l'arrêt du contrôleur (mort, perte de l'entité, arrêt du plugin) ; peut l'être plusieurs fois. */
+    protected void onCancel() {
+    }
+
+    /** Numéro de phase à sauvegarder avec le boss dormant (0 si le boss n'a pas de phases). */
+    protected int savedPhase() {
+        return 0;
+    }
+
+    /** Cœurs restants à sauvegarder avec le boss dormant (0 si le boss n'en a pas). */
+    protected int savedHearts() {
+        return 0;
+    }
+
+    // ------------------------------------------------------------------ cycle de vie
+
+    public final void start(StartMode mode) {
+        onStart(mode);
         bossManager.registerActiveBoss(this);
         this.runTaskTimer(plugin, 0L, 1L);
     }
@@ -95,13 +128,10 @@ public class BossController extends BukkitRunnable {
         if (tickCounter % 20 == 0) {
             updateTarget();
             updateBossBar();
+            onSecond();
         }
 
-        if (target != null) {
-            updateAttackingMovement();
-            updateAmbientParticles();
-            updateAmbientSound();
-        }
+        onTick();
 
         this.lastKnownLocation = boss.getLocation();
         this.lastKnownHealth = boss.getHealth();
@@ -111,18 +141,21 @@ public class BossController extends BukkitRunnable {
     public synchronized void cancel() throws IllegalStateException {
         super.cancel();
         bossBar.removeAll();
+        onCancel();
     }
+
+    // ------------------------------------------------------------------ cible et barre de boss
 
     public void setExternalTarget(Player player) {
         this.externalTarget = player;
     }
 
-    private void updateTarget() {
+    protected void updateTarget() {
         // Une île peut couvrir plusieurs dimensions : seule la cible du même monde que le boss est mesurable
         World bossWorld = boss.getWorld();
         List<Player> islandMembers = island.getIslandMembers(true).stream()
             .map(SuperiorPlayer::asPlayer)
-            .filter(p -> p != null && p.isOnline() && !p.isDead() && p.getGameMode() != org.bukkit.GameMode.SPECTATOR && p.getWorld().equals(bossWorld) && island.isInside(p.getLocation()))
+            .filter(p -> p != null && p.isOnline() && !p.isDead() && p.getGameMode() != GameMode.SPECTATOR && p.getWorld().equals(bossWorld) && island.isInside(p.getLocation()))
             .collect(Collectors.toList());
         Player validExternalTarget = (externalTarget != null && externalTarget.isOnline() && !externalTarget.isDead() && externalTarget.getWorld().equals(bossWorld)) ? externalTarget : null;
         this.target = Stream.concat(islandMembers.stream(), Stream.ofNullable(validExternalTarget))
@@ -131,106 +164,39 @@ public class BossController extends BukkitRunnable {
             .orElse(null);
     }
 
-    private void updateAttackingMovement() {
-        // La cible est choisie une fois par seconde : elle a pu changer de monde ou se déconnecter depuis
-        if (target == null || !target.isOnline() || !target.getWorld().equals(boss.getWorld())) return;
-        Location bossLoc = boss.getLocation();
-        Location targetLoc = target.getEyeLocation();
-        Vector direction = targetLoc.toVector().subtract(bossLoc.toVector());
-        double distanceSquared = bossLoc.distanceSquared(targetLoc);
-
-        if (configManager.isRangedAttackEnabled() && distanceSquared > configManager.getRangedAttackMinRangeSquared() && tickCounter >= lastRangedAttackTick + configManager.getRangedAttackCooldownTicks()) {
-            fireRangedAttack(direction.clone());
-            lastRangedAttackTick = tickCounter;
-        } else if (distanceSquared < configManager.getRangedAttackMinRangeSquared() && tickCounter >= lastMeleeAttackTick + configManager.getBossAttackCooldownTicks()) {
-            if (distanceSquared < 4.0 * 4.0) target.damage(configManager.getBossAttackDamage(), boss);
-            lastMeleeAttackTick = tickCounter;
-        }
-
-        Location nextPos = boss.getLocation().clone();
-        if (distanceSquared > configManager.getBossStoppingDistanceSquared()) {
-            double speed = configManager.getBossSpeedMultiplier() * 0.1;
-            nextPos.add(direction.clone().normalize().multiply(speed));
-        }
-
-        nextPos.setYaw((float) Math.toDegrees(Math.atan2(-direction.getX(), direction.getZ())));
-        nextPos.setPitch((float) Math.toDegrees(Math.atan2(-direction.getY(), Math.sqrt(Math.pow(direction.getX(), 2) + Math.pow(direction.getZ(), 2)))));
-
-        if (island.isInside(nextPos)) {
-            boss.teleport(nextPos);
-        } else {
-            boss.teleport(island.getCenter(dimension(boss.getWorld().getEnvironment())));
-        }
-    }
-
-    private void fireRangedAttack(Vector direction) {
-        Vector mainDir = direction.normalize();
-        Location spawnPos = boss.getEyeLocation().add(mainDir.clone().multiply(1.5));
-
-        DragonFireball mainFireball = boss.getWorld().spawn(spawnPos, DragonFireball.class);
-        mainFireball.setDirection(mainDir);
-        mainFireball.setShooter(boss);
-
-        Vector side = mainDir.clone().crossProduct(new Vector(0, 1, 0)).normalize().multiply(0.4);
-        DragonFireball leftFireball = boss.getWorld().spawn(spawnPos, DragonFireball.class);
-        leftFireball.setDirection(mainDir.clone().add(side).normalize());
-        leftFireball.setShooter(boss);
-
-        DragonFireball rightFireball = boss.getWorld().spawn(spawnPos, DragonFireball.class);
-        rightFireball.setDirection(mainDir.clone().subtract(side).normalize());
-        rightFireball.setShooter(boss);
-
-        boss.getWorld().playSound(boss.getLocation(), configManager.getRangedAttackSound(), configManager.getRangedAttackSoundVolume(), configManager.getRangedAttackSoundPitch());
-    }
-
-    private void updateAmbientParticles() {
-        if (configManager.isAmbientParticlesEnabled() && tickCounter % 4 == 0) {
-            boss.getWorld().spawnParticle(configManager.getAmbientParticleType(), boss.getLocation().add(0, boss.getHeight() / 2, 0), configManager.getAmbientParticleCount(), boss.getWidth() / 2, boss.getHeight() / 2, boss.getWidth() / 2, configManager.getAmbientParticleSpeed());
-        }
-    }
-
-    private void updateAmbientSound() {
-        if (tickCounter % (configManager.getBossSoundDelay() * 20) == 0) {
-            boss.getWorld().playSound(boss.getLocation(), configManager.getBossAmbientSound(), configManager.getBossSoundVolume(), configManager.getBossSoundPitch());
-        }
-    }
-
-    private LivingEntity createBossEntity(Location location, double maxHealth, double currentHealth) {
-        LivingEntity spawned = (LivingEntity) location.getWorld().spawnEntity(location, configManager.getBossEntityType());
-        spawned.setAI(false);
-        spawned.setCollidable(false);
-        spawned.setSilent(true);
-        spawned.setCustomName(configManager.getBossName());
-        spawned.setCustomNameVisible(true);
-        spawned.setPersistent(true);
-        spawned.getPersistentDataContainer().set(SHEggDragonBoss.BOSS_KEY, org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
-        if (spawned instanceof Phantom) ((Phantom) spawned).setSize(configManager.getPhantomSize());
-        AttributeInstance maxHealthAttr = spawned.getAttribute(Attribute.MAX_HEALTH);
-        if (maxHealthAttr != null) maxHealthAttr.setBaseValue(maxHealth);
-        spawned.setHealth(Math.min(currentHealth, maxHealth));
-        return spawned;
-    }
-
-    private BossBar createBossBar() {
-        return Bukkit.createBossBar(configManager.getBossName(), BarColor.PURPLE, BarStyle.SOLID);
-    }
-
-    private void playSpawnEffects() {
-        Location loc = boss.getLocation();
-        if (configManager.isSpawnExplosionEnabled())
-            loc.getWorld().createExplosion(loc, configManager.getSpawnExplosionPower(), configManager.isSpawnExplosionSetFire(), configManager.shouldSpawnExplosionBreakBlocks(), boss);
-        loc.getWorld().playSound(loc, configManager.getBossSpawnSound(), configManager.getBossSpawnSoundVolume(), configManager.getBossSpawnSoundPitch());
-    }
-
-    private void updateBossBar() {
-        double currentHealth = boss.getHealth();
-        bossBar.setProgress(Math.max(0.0, Math.min(1.0, currentHealth / maxHealth)));
-        bossBar.setTitle(configManager.getBossBarTitle().replace("{name}", configManager.getBossName()).replace("{current_health}", String.valueOf((int) Math.round(currentHealth))).replace("{max_health}", String.valueOf((int) Math.round(maxHealth))));
+    /** Les joueurs qui voient la barre de boss : membres de l'île en ligne, plus l'agresseur extérieur. */
+    protected Set<Player> viewers() {
         Set<Player> viewers = island.getIslandMembers(true).stream().filter(SuperiorPlayer::isOnline).map(SuperiorPlayer::asPlayer).filter(Objects::nonNull).collect(Collectors.toSet());
         if (externalTarget != null && externalTarget.isOnline()) viewers.add(externalTarget);
+        return viewers;
+    }
+
+    protected void updateBossBar() {
+        double currentHealth = boss.getHealth();
+        bossBar.setProgress(Math.max(0.0, Math.min(1.0, currentHealth / maxHealth)));
+        bossBar.setTitle(barTitle());
+        BarColor color = barColor();
+        if (color != shownColor) {
+            bossBar.setColor(color);
+            shownColor = color;
+        }
+        BarStyle style = barStyle();
+        if (style != shownStyle) {
+            bossBar.setStyle(style);
+            shownStyle = style;
+        }
+        Set<Player> viewers = new HashSet<>(viewers());
         new ArrayList<>(bossBar.getPlayers()).stream().filter(p -> !viewers.contains(p)).forEach(bossBar::removePlayer);
         viewers.stream().filter(p -> !bossBar.getPlayers().contains(p)).forEach(bossBar::addPlayer);
     }
+
+    /** Envoie un message aux joueurs qui suivent le combat ; un message vide n'est pas envoyé. */
+    protected void tellViewers(String message) {
+        if (message == null || message.isEmpty()) return;
+        for (Player viewer : viewers()) viewer.sendMessage(message);
+    }
+
+    // ------------------------------------------------------------------ accès et sauvegarde
 
     public LivingEntity getBoss() {
         return boss;
@@ -245,11 +211,15 @@ public class BossController extends BukkitRunnable {
     }
 
     public BossDataManager.BossData getBossData() {
-        return new BossDataManager.BossData(island.getUniqueId(), this.lastKnownLocation, this.lastKnownHealth, maxHealth);
+        return new BossDataManager.BossData(island.getUniqueId(), type(), lastKnownLocation, lastKnownHealth, maxHealth, savedPhase(), savedHearts());
+    }
+
+    protected String islandLabel() {
+        return (island != null && island.getOwner() != null) ? "l'île de " + island.getOwner().getName() : "une île inconnue";
     }
 
     // SSB2 2026 : getCenter prend une Dimension et non plus un World.Environment
-    private static Dimension dimension(World.Environment env) {
+    protected static Dimension dimension(World.Environment env) {
         for (Dimension d : Dimension.values()) {
             if (d.getEnvironment() == env) return d;
         }
