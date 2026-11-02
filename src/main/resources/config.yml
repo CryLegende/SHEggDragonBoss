@@ -237,10 +237,7 @@ bosses:
     movement-speed-multiplier: 2
     stopping-distance: 2.5
     # Causes de dégâts ignorées par le boss. Noms de EntityDamageEvent.DamageCause.
-    # PROJECTILE : le Creaking se fige quand on le regarde et ses attaques ne portent qu'à 6-8 blocs, un arc le tuerait
-    # sans aucun risque ; il se combat donc au corps à corps.
     immune-damage-causes:
-      - PROJECTILE
       - SUFFOCATION
       - ENTITY_EXPLOSION
       - BLOCK_EXPLOSION
@@ -363,7 +360,10 @@ bosses:
     # Intervalle, en ticks, entre deux contrôles de l'arène et des attaques.
     check-interval-ticks: 5
     # Causes de dégâts ignorées par le boss. Noms de EntityDamageEvent.DamageCause.
+    # PROJECTILE : le Creaking se fige quand on le regarde et ses attaques ne portent qu'à 6-8 blocs, un arc le tuerait
+    # sans aucun risque ; il se combat donc au corps à corps.
     immune-damage-causes:
+      - PROJECTILE
       - SUFFOCATION
       - ENTITY_EXPLOSION
       - BLOCK_EXPLOSION
