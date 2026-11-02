@@ -325,7 +325,7 @@ bosses:
   # cœurs apparaissent autour de lui : tant qu'il en reste, il ne perd aucun PV. Il ne quitte jamais l'île.
   # ---------------------------------------------------------------
   creaking:
-    name: "&6Creaking Colossal"
+    name: "&2Creaking"
     # Barre de boss. Placeholders : {name}, {current_health}, {max_health} et, pendant une phase, {hearts}, {phase}, {phases}.
     # La barre change de titre, de couleur et de style pendant une phase d'invulnérabilité (shield-*).
     bossbar:
