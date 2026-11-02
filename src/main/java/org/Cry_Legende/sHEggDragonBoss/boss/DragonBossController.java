@@ -66,7 +66,7 @@ public class DragonBossController extends BossController {
             case WOKEN_FROM_DORMANT ->
                 plugin.getLogManager().log(String.format("Un boss dormant a été réveillé sur %s (Vie: %.1f/%.1f).", islandName, boss.getHealth(), maxHealth));
             case RESTORED ->
-                plugin.getLogManager().log(String.format("Un boss a été restauré sur %s après un redémarrage.", islandName));
+                plugin.getLogManager().log(String.format("Un boss a été restauré sur %s (Vie: %.1f/%.1f).", islandName, boss.getHealth(), maxHealth));
         }
     }
 

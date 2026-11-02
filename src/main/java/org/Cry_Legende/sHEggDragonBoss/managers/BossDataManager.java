@@ -83,7 +83,12 @@ public class BossDataManager {
             plugin.getLogger().warning("Rituel '" + typeId + "' en " + serializeLocation(loc) + " conservé tel quel : ce rituel est inconnu ou désactivé.");
             return false;
         }
-        if (loc.getBlock().getType() != ritual.block()) return true;
+        if (loc.getBlock().getType() != ritual.block()) {
+            // Arrêt brutal en plein compte à rebours : l'animation avait retiré le bloc du monde. On le remet (les objets
+            // donnés sont dans les données) : un clic avec l'objet relance le compte à rebours au lieu de tout perdre.
+            if (loc.getBlock().getType().isAir() && items >= ritual.requiredAmount()) loc.getBlock().setType(ritual.block());
+            else return true;
+        }
         RitualProcess process = new RitualProcess(plugin, ritual, loc);
         process.setCurrentItems(items);
         process.updateHologram();

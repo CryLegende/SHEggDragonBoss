@@ -237,7 +237,10 @@ bosses:
     movement-speed-multiplier: 2
     stopping-distance: 2.5
     # Causes de dégâts ignorées par le boss. Noms de EntityDamageEvent.DamageCause.
+    # PROJECTILE : le Creaking se fige quand on le regarde et ses attaques ne portent qu'à 6-8 blocs, un arc le tuerait
+    # sans aucun risque ; il se combat donc au corps à corps.
     immune-damage-causes:
+      - PROJECTILE
       - SUFFOCATION
       - ENTITY_EXPLOSION
       - BLOCK_EXPLOSION
@@ -388,7 +391,7 @@ bosses:
         hearts: 5
 
     # --- CŒURS ---
-    # Blocs CREAKING_HEART posés par le plugin (non naturels : aucun Creaking vanilla n'en sort) sur des blocs d'air de l'île,
+    # Blocs CREAKING_HEART posés par le plugin sur des blocs d'air de l'île, jamais entre deux bûches de chêne pâle (sinon le cœur s'éveille la nuit et fait apparaître un Creaking vanilla),
     # dans la couche du boss, avec un bloc solide dessous quand c'est possible, sinon en l'air. Ils ne remplacent jamais un bloc.
     # On les détruit en les frappant (clic gauche), sans casser le bloc : aucune protection d'île ne les bloque.
     hearts:
@@ -540,7 +543,7 @@ bosses:
       # Points d'expérience donnés au tueur, en une seule orbe.
       xp-reward: 20000
       # Objets lâchés à la mort (même format que le dragon). Aucun par défaut : les récompenses passent par la commande.
-      items:
+      items: []
       # Commandes lancées par la console à la mort du boss (mêmes placeholders que le dragon).
       commands:
         - "rc creaking-rewards {player}"

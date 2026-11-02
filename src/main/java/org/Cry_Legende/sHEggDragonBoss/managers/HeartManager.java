@@ -10,6 +10,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.CreakingHeart;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -214,15 +215,32 @@ public class HeartManager {
             if (!heart.world.equals(world)) continue;
             if (heart.block().getLocation().add(0.5, 0.5, 0.5).distanceSquared(center) < minSpacingSquared) return false;
         }
+        // Un cœur entre deux bûches de chêne pâle s'éveille la nuit comme un cœur naturel (la propriété « natural » n'y change
+        // rien) : il ferait apparaître un Creaking vanilla et de la résine. On n'en pose jamais à un tel emplacement.
+        if (betweenPaleLogs(block)) return false;
         // Jamais dans un joueur ni dans une créature : le bloc l'étoufferait
         BoundingBox box = BoundingBox.of(block).expand(0.05);
         return world.getNearbyEntities(box, e -> e instanceof LivingEntity).isEmpty();
     }
 
+    private static boolean betweenPaleLogs(Block block) {
+        for (BlockFace face : new BlockFace[]{BlockFace.UP, BlockFace.NORTH, BlockFace.EAST}) {
+            if (isPaleWood(block.getRelative(face)) && isPaleWood(block.getRelative(face.getOppositeFace()))) return true;
+        }
+        return false;
+    }
+
+    private static boolean isPaleWood(Block block) {
+        Material type = block.getType();
+        return type == Material.PALE_OAK_LOG || type == Material.PALE_OAK_WOOD
+            || type == Material.STRIPPED_PALE_OAK_LOG || type == Material.STRIPPED_PALE_OAK_WOOD;
+    }
+
     private static void setHeart(Block block) {
         BlockData data = Material.CREAKING_HEART.createBlockData();
         if (data instanceof CreakingHeart heart) {
-            // natural=false : aucun Creaking vanilla ne doit apparaître de ce cœur ; éveillé pour le rendu
+            // Éveillé pour le rendu. Ce qui empêche un Creaking vanilla d'apparaître, c'est l'absence de bûches de chêne pâle
+            // de part et d'autre (voir isValidSpot) ; natural=false est posé par prudence, le jeu ne le lit pas pour cela.
             heart.setNatural(false);
             heart.setCreakingHeartState(CreakingHeart.State.AWAKE);
         }
