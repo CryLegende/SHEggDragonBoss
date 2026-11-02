@@ -126,6 +126,7 @@ public abstract class BossController extends BukkitRunnable {
         tickCounter++;
 
         if (tickCounter % 20 == 0) {
+            persistHealth();
             updateTarget();
             updateBossBar();
             onSecond();
@@ -135,6 +136,13 @@ public abstract class BossController extends BukkitRunnable {
 
         this.lastKnownLocation = boss.getLocation();
         this.lastKnownHealth = boss.getHealth();
+    }
+
+    /** Copie les PV max et les PV sur l'entité : voir {@link SHEggDragonBoss#BOSS_MAX_HEALTH_KEY}. */
+    private void persistHealth() {
+        var container = boss.getPersistentDataContainer();
+        container.set(SHEggDragonBoss.BOSS_MAX_HEALTH_KEY, org.bukkit.persistence.PersistentDataType.DOUBLE, maxHealth);
+        container.set(SHEggDragonBoss.BOSS_HEALTH_KEY, org.bukkit.persistence.PersistentDataType.DOUBLE, boss.getHealth());
     }
 
     @Override

@@ -175,6 +175,18 @@ public class BossManager {
         dormantBosses.remove(island.getUniqueId());
         AttributeInstance maxHealth = boss.getAttribute(Attribute.MAX_HEALTH);
         double max = maxHealth != null ? maxHealth.getBaseValue() : boss.getHealth();
+        // Purpur remet les PV max du Phantom à 20 au rechargement du chunk : on rend au boss ceux qu'il avait (copie du PDC)
+        Double savedMax = boss.getPersistentDataContainer().get(SHEggDragonBoss.BOSS_MAX_HEALTH_KEY, PersistentDataType.DOUBLE);
+        Double savedHealth = boss.getPersistentDataContainer().get(SHEggDragonBoss.BOSS_HEALTH_KEY, PersistentDataType.DOUBLE);
+        if (savedMax != null && savedMax > 0 && maxHealth != null && Math.abs(maxHealth.getBaseValue() - savedMax) > 1.0E-6) {
+            try {
+                maxHealth.setBaseValue(savedMax);
+                max = savedMax;
+                if (savedHealth != null && savedHealth > 0) boss.setHealth(Math.min(savedHealth, savedMax));
+            } catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("PV max du boss non restaurés (" + savedMax + ") : " + e.getMessage());
+            }
+        }
         switch (type) {
             case DRAGON -> DragonBossController.adopt(plugin, this, island, boss, max);
             case CREAKING -> {
@@ -248,7 +260,7 @@ public class BossManager {
     public void salvageLostBoss(BossController controller) {
         if (controller == null) return;
 
-        plugin.getLogger().warning("Le boss " + controller.getUniqueId() + " a été détecté comme invalide (despawn). Sauvegarde en mode dormant.");
+        plugin.getLogger().info("Le boss " + controller.getUniqueId() + " a été détecté comme invalide (despawn). Sauvegarde en mode dormant.");
 
         activeBosses.remove(controller.getUniqueId());
         dormantBosses.put(controller.getIsland().getUniqueId(), controller.getBossData());
