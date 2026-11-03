@@ -3,6 +3,7 @@ package org.Cry_Legende.sHEggDragonBoss.managers;
 import com.bgsoftware.superiorskyblock.api.island.Island;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.Cry_Legende.sHEggDragonBoss.boss.HeartOwner;
+import org.Cry_Legende.sHEggDragonBoss.boss.PlayerText;
 import org.Cry_Legende.sHEggDragonBoss.config.CreakingSettings;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -28,9 +29,11 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -92,6 +95,8 @@ public class HeartManager {
     private final File file;
     private final Map<BlockKey, Heart> hearts = new HashMap<>();
     private final Map<UUID, Long> lastHitNanos = new HashMap<>();
+    // Joueurs qui ont déjà reçu l'explication « clic gauche répété » pendant ce combat
+    private final Set<UUID> hinted = new HashSet<>();
     // Cœurs sans propriétaire (reste d'un arrêt brutal, ou chunk déchargé au moment du retrait) : monde (minuscules) -> chunk -> positions
     private final Map<String, Map<Long, List<int[]>>> orphans = new HashMap<>();
     private final Map<String, String> worldNames = new HashMap<>();
@@ -267,6 +272,16 @@ public class HeartManager {
         if (heart.hitsLeft > 0) {
             cfg.hitFx().spawn(center);
             cfg.hitSound().play(center);
+            // Le joueur voit tout de suite que son coup compte, et qu'il faut recommencer : on ne mine pas un cœur, on le frappe
+            int done = cfg.hitsToBreak() - heart.hitsLeft;
+            PlayerText.actionBar(player, cfg.hitActionbar()
+                .replace("{bar}", "§a" + "▮".repeat(Math.max(0, done)) + "§8" + "▮".repeat(Math.max(0, heart.hitsLeft)))
+                .replace("{done}", String.valueOf(done))
+                .replace("{total}", String.valueOf(cfg.hitsToBreak())));
+            if (hinted.add(player.getUniqueId())) {
+                String hint = plugin.getConfigManager().creaking().messages().heartHint();
+                if (!hint.isEmpty()) player.sendMessage(hint);
+            }
             return true;
         }
 
@@ -282,6 +297,17 @@ public class HeartManager {
 
     public void forgetPlayer(UUID playerId) {
         lastHitNanos.remove(playerId);
+        hinted.remove(playerId);
+    }
+
+    /** Centres des cœurs encore posés pour ce boss, dans les chunks chargés (pour les repères visuels et la boussole). */
+    public List<Location> locations(UUID bossId) {
+        List<Location> result = new ArrayList<>();
+        for (Heart heart : hearts.values()) {
+            if (!heart.owner.bossId().equals(bossId) || !heart.chunkLoaded()) continue;
+            result.add(new Location(heart.world, heart.key.x() + 0.5, heart.key.y() + 0.5, heart.key.z() + 0.5));
+        }
+        return result;
     }
 
     // ------------------------------------------------------------------ retrait
@@ -295,6 +321,8 @@ public class HeartManager {
             changed = true;
         }
         if (changed) {
+            // Fin de combat : le prochain combat réexplique la mécanique à tout le monde
+            hinted.clear();
             updateGuard();
             save();
         }

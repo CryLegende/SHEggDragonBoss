@@ -60,12 +60,24 @@ messages:
     ritual-started: "&7&l« &e&lSH &8&l» &7La résine réagit au &ecœur du Creaking&7..."
     # Interaction ou casse du cœur pendant le compte à rebours.
     ritual-locked: "&7&l« &c&lSH &8&l» &7Ce cœur est sur le point de s'éveiller et ne peut plus être touché !"
+    # Le boss apparaît : envoyé une fois aux joueurs de l'île, il explique la règle du regard.
+    spawn-hint: "&7&l« &2&lSH &8&l» &7Le Creaking &2se fige &7tant qu'on le &eregarde&7. Quand le &8noir &7tombe, plus rien ne l'arrête : écoutez ses &8craquements&7."
     # Le boss passe sous un seuil de PV : il devient invulnérable et des cœurs apparaissent autour de lui.
-    shield-start: "&7&l« &6&lSH &8&l» &7Le Creaking devient &6invulnérable &7! Détruisez les &6{hearts} cœurs &7qui l'entourent."
+    shield-start: "&7&l« &6&lSH &8&l» &7Le Creaking devient &6invulnérable &7! &eFrappez &7les &6{hearts} cœurs &7qui l'entourent : &eclic gauche répété&7, un cœur ne se mine pas."
+    # Titre et sous-titre affichés à l'écran au début d'une phase. Vide : aucun.
+    shield-title: "&6&lFRAPPEZ LES CŒURS"
+    shield-subtitle: "&7Clic gauche répété sur chacun des &e{hearts} &7cœurs"
+    # Envoyé une seule fois à chaque joueur, au premier coup qu'il donne à un cœur pendant le combat.
+    heart-hint: "&7&l« &e&lSH &8&l» &7Continuez de &efrapper &7(clic gauche répété) : un cœur ne se &cmine pas&7, il s'use sous les coups."
     # Un cœur est brisé et il en reste d'autres.
     heart-destroyed: "&7&l« &e&lSH &8&l» &e{player} &7brise un cœur. Cœurs restants : &e{hearts}&7."
     # Le dernier cœur est tombé : le boss peut de nouveau être blessé.
     shield-end: "&7&l« &a&lSH &8&l» &7Le dernier cœur est tombé : le Creaking est de nouveau &avulnérable &7!"
+    # Le Noir approche : titre et sous-titre affichés aux joueurs à portée. Vide : aucun.
+    blackout-title: "&8&lLe noir tombe..."
+    blackout-subtitle: "&7Il ne s'arrête plus. &eÉcoutez&7 et &eécartez-vous&7."
+    # Barre d'action du joueur qui esquive la frappe du boss.
+    dodge: "&a&lEsquivé !"
 
 # ----------------------------------------------------------------#
 #                            RITUELS                              #
@@ -321,8 +333,14 @@ bosses:
 
   # ---------------------------------------------------------------
   # Boss n°2 : le Creaking. IA vanilla active : il poursuit les joueurs, les frappe, et se fige quand un joueur
-  # le regarde (mécanique du jeu, pas du plugin). Quand ses PV passent sous un seuil, il devient invulnérable et des
-  # cœurs apparaissent autour de lui : tant qu'il en reste, il ne perd aucun PV. Il ne quitte jamais l'île.
+  # le regarde (mécanique du jeu, pas du plugin). Le plugin joue sur ce regard :
+  #   - le Noir : il aveugle les joueurs proches ; un joueur aveuglé ne le fige plus, alors le boss se téléporte
+  #     derrière lui et le frappe (la frappe est annoncée par un craquement, on l'esquive en s'éloignant) ;
+  #   - quand ses PV passent sous un seuil, il devient invulnérable et des cœurs apparaissent autour de lui : tant
+  #     qu'il en reste, il ne perd aucun PV. On les brise en les FRAPPANT (clic gauche répété), pas en les minant ;
+  #   - ses dégâts « réels » (un pourcentage des PV max du joueur) traversent armure, protections et absorption,
+  #     et aucun coup ne lui retire plus de max-hit-percent % de ses PV : un équipement complet ne le fait pas tomber en quelques secondes.
+  # Il ne quitte jamais l'île.
   # ---------------------------------------------------------------
   creaking:
     name: "&2Creaking"
@@ -332,7 +350,7 @@ bosses:
       title: "{name} &7- &c&l{current_health} &4/ &c&l{max_health} &4❤"
       color: "WHITE"
       style: "SOLID"
-      shield-title: "{name} &7- &6&lINVULNÉRABLE &7- Cœurs restants : &c&l{hearts}"
+      shield-title: "{name} &7- &6&lINVULNÉRABLE &7- &eFrappez les cœurs &7: &c&l{hearts}"
       shield-color: "RED"
       shield-style: "SOLID"
 
@@ -345,6 +363,9 @@ bosses:
       health-per-island-member: 20.0
     # Dégâts de la frappe vanilla (corps à corps).
     attack-damage: 18.0
+    # À chaque frappe de mêlée, part des PV MAX du joueur retirée en plus, directement : ni l'armure, ni les
+    # enchantements de protection, ni l'absorption ne l'arrêtent (0 : désactivé). Voir aussi les attaques ci-dessous.
+    melee-true-damage-percent: 4.0
     # Vitesse de déplacement (attribut vanilla ; le Creaking vanilla marche à 0.4).
     movement-speed: 0.4
     # Armure (0 à 30) et robustesse (0 à 20) : réduisent les dégâts reçus comme pour un joueur.
@@ -371,6 +392,10 @@ bosses:
       - FIRE_TICK
       - LAVA
       - HOT_FLOOR
+    # Aucun coup ne retire plus de ce pourcentage des PV max du boss (0 : pas de plafond). Face à un équipement complet
+    # enchanté, c'est ce plafond qui fixe la durée minimale du combat : 0.5 % = au moins 200 coups, quelle que soit la force
+    # du coup. Les phases d'invulnérabilité s'y ajoutent.
+    max-hit-percent: 0.5
 
     # --- ARÈNE ---
     # Hors de l'île, ou à plus de max-depth-below-center blocs sous le centre de l'île (vide), le boss est ramené
@@ -395,7 +420,7 @@ bosses:
     # dans la couche du boss, avec un bloc solide dessous quand c'est possible, sinon en l'air. Ils ne remplacent jamais un bloc.
     # On les détruit en les frappant (clic gauche), sans casser le bloc : aucune protection d'île ne les bloque.
     hearts:
-      # Nombre de coups pour détruire un cœur.
+      # Nombre de coups (clics gauches) pour détruire un cœur. Le bloc ne se mine pas : maintenir le clic ne compte pas.
       hits-to-break: 6
       # Délai minimal entre deux coups d'un même joueur, en secondes (anti-spam).
       hit-cooldown-seconds: 0.3
@@ -440,12 +465,30 @@ bosses:
         count: 20
         spread: 0.4
         speed: 0.05
+      # Barre d'action du joueur à chaque coup qui ne détruit pas le cœur. {bar} = coups donnés (vert) et restants (gris),
+      # {done} coups donnés, {total} coups nécessaires.
+      hit-actionbar: "&6❤ Cœur &8» {bar} &7{done}/{total} &8- &eclic gauche répété"
+      # Colonne de particules au-dessus de chaque cœur, visible de loin. count = nombre de particules dans la colonne,
+      # height = hauteur de la colonne en blocs, interval-ticks = délai entre deux rafraîchissements.
+      marker-particles:
+        particle: "END_ROD"
+        count: 8
+        speed: 0.0
+        height: 5.0
+        interval-ticks: 6
+      # Boussole : à tous les joueurs de l'île à moins de `range` blocs du boss, tant qu'il reste des cœurs.
+      # {arrow} = direction du cœur le plus proche par rapport au regard du joueur, {distance} = distance en blocs,
+      # {hearts} = cœurs restants. Lisible même quand le joueur est aveuglé.
+      guide:
+        actionbar: "&6❤ &7Cœurs restants : &e{hearts} &8» &7le plus proche : &e{arrow} {distance} m &8- &eclic gauche répété"
+        interval-ticks: 10
+        range: 64.0
 
     # --- ATTAQUES DU PLUGIN ---
     # Elles s'ajoutent à la frappe vanilla et ne dépendent pas du regard des joueurs. Elles touchent les joueurs
     # de l'île qui sont dans le rayon. Une attaque sans joueur à portée ne consomme pas son délai.
     # Pendant une phase d'invulnérabilité, le boss ne frappe plus qu'en mêlée vanille et lance l'onde de choc
-    # shield-frequency-factor fois plus souvent ; la résine suit during-shield.
+    # shield-frequency-factor fois plus souvent ; la résine suit during-shield. Le Noir continue (après un court répit).
     attacks:
       # Onde de choc : dégâts et recul pour les joueurs proches, avec un anneau de particules à la limite.
       shockwave:
@@ -453,8 +496,10 @@ bosses:
         cooldown-ticks: 160
         # Rayon en blocs.
         radius: 6.0
-        # Dégâts (2 = un cœur).
+        # Dégâts (2 = un cœur), arrêtés par l'armure comme tout coup normal.
         damage: 10.0
+        # Part des PV max du joueur retirée en plus, directement (ni armure, ni protection, ni absorption). 0 : désactivé.
+        true-damage-percent: 5.0
         # Recul : force horizontale (loin du boss) et verticale (vers le haut).
         knockback-horizontal: 1.4
         knockback-vertical: 0.6
@@ -495,6 +540,81 @@ bosses:
           count: 15
           spread: 0.4
           speed: 0.0
+
+      # Le Noir : le boss éteint la lumière. Annonce (titre, son), puis les joueurs à portée sont aveuglés pendant
+      # `duration-ticks`. Un joueur aveuglé ne fige plus le Creaking du regard : le boss se téléporte derrière l'un d'eux
+      # (craquement à l'arrivée, c'est le seul indice), puis le frappe `strike-delay-ticks` plus tard. Le joueur esquive en
+      # s'éloignant de plus de `strike-reach` blocs. Un joueur qui retire son aveuglement (lait...) n'est plus pris pour cible.
+      # Sans joueur à portée, rien ne se passe et le délai n'est pas consommé.
+      blackout:
+        enabled: true
+        # Délai entre la fin d'un Noir et l'annonce du suivant.
+        cooldown-ticks: 360
+        # Chaque phase d'invulnérabilité déclenchée multiplie ce délai par ce facteur (0.8 : 20 % plus court par phase).
+        phase-cooldown-factor: 0.8
+        # Après le début d'une phase, le Noir attend au moins ce délai (le temps de lire le titre et de repérer les cœurs).
+        after-phase-delay-ticks: 120
+        # Rayon, en blocs, autour du boss.
+        radius: 30.0
+        # Durée de l'annonce, avant l'aveuglement.
+        telegraph-ticks: 30
+        # Durée de l'aveuglement.
+        duration-ticks: 100
+        # Délai avant la première téléportation, puis entre deux téléportations. 100 / 30 = trois frappes par Noir.
+        first-blink-delay-ticks: 10
+        blink-interval-ticks: 30
+        # Distance, en blocs, entre le boss et sa proie à l'arrivée (derrière elle quand c'est possible).
+        blink-distance: 2.0
+        # Délai entre l'arrivée du boss et sa frappe : le temps d'entendre le craquement et de s'écarter.
+        strike-delay-ticks: 14
+        # Portée de la frappe, en blocs. Au-delà, le joueur l'a esquivée.
+        strike-reach: 3.2
+        # Dégâts normaux de la frappe (arrêtés par l'armure) et part des PV max du joueur retirée en plus, directement.
+        strike-damage: 14.0
+        strike-true-damage-percent: 15.0
+        # Force du recul de la frappe.
+        strike-knockback: 0.6
+        # Effets appliqués pendant le Noir. type : nom d'effet, amplifier : niveau - 1. La durée est celle de l'aveuglement.
+        effects:
+          - type: "blindness"
+            amplifier: 0
+          - type: "darkness"
+            amplifier: 0
+        # Annonce, entendue par chaque joueur à portée.
+        telegraph-sound:
+          sound: "ENTITY_WARDEN_HEARTBEAT"
+          volume: 2.0
+          pitch: 0.6
+        # Autour de chaque joueur à portée pendant l'annonce.
+        telegraph-particles:
+          particle: "SCULK_SOUL"
+          count: 6
+          spread: 0.5
+          speed: 0.02
+        # Craquement à l'arrivée du boss : positionnel, c'est ce qui indique d'où vient la menace.
+        blink-sound:
+          sound: "ENTITY_CREAKING_ACTIVATE"
+          volume: 3.0
+          pitch: 0.5
+        blink-particles:
+          particle: "REVERSE_PORTAL"
+          count: 30
+          spread: 0.4
+          speed: 0.1
+        strike-sound:
+          sound: "ENTITY_WARDEN_ATTACK_IMPACT"
+          volume: 2.0
+          pitch: 0.7
+        strike-particles:
+          particle: "CRIT"
+          count: 25
+          spread: 0.4
+          speed: 0.3
+        # Le joueur esquive.
+        dodge-sound:
+          sound: "ENTITY_PLAYER_ATTACK_NODAMAGE"
+          volume: 1.0
+          pitch: 0.8
 
     # --- SONS ET EFFETS ---
     # Le Creaking garde ses sons vanilla ; ceux-ci s'y ajoutent. Un nom vide ("") désactive un son.

@@ -22,7 +22,7 @@ Chaque boss se lance par un rituel : un clic droit sur un bloc avec un objet (Sh
 | Objet requis | 15 `ECHO_SHARD` | 10 `RESIN_BRICK` |
 | Compte à rebours | 10 s | 10 s |
 | Boss | Phantom « Jeune Ender Dragon », sans IA, qui poursuit les joueurs de l'île | Creaking à l'IA vanilla (il se fige quand on le regarde) |
-| Combat | Frappe de près et boules de feu de loin | Frappe vanilla, onde de choc et résine collante |
+| Combat | Frappe de près et boules de feu de loin | Frappe vanilla, onde de choc, résine collante et le Noir (cécité, téléportations) |
 | Particularité | | Invulnérable par phases (66 % puis 33 % des PV) tant qu'il reste des cœurs à détruire à la main autour de lui |
 | Récompenses | 1 membrane de phantom, 15 000 XP, commande `rc dragonegg-rewards {player}` | 20 000 XP, commande `rc creaking-rewards {player}` |
 
@@ -36,11 +36,16 @@ Règles communes :
 
 ### Le combat du Creaking
 
-- Sous un seuil de PV, le boss devient invulnérable, la barre de boss change de titre et de couleur et affiche les cœurs restants. Des blocs `CREAKING_HEART` non naturels apparaissent sur des blocs d'air de l'île, à quelques blocs de lui.
-- Les cœurs se détruisent à la main : un clic gauche retire un point de vie du cœur, sans casser le bloc, donc sans dépendre d'une protection d'île. Explosions, pistons, eau et créatures ne peuvent ni les déplacer ni les casser.
-- Quand le dernier cœur tombe, le boss redevient vulnérable. S'il meurt ou disparaît, tous les cœurs restants sont supprimés ; leurs positions sont écrites sur disque pour nettoyer après un arrêt brutal.
+Le Creaking vanilla se fige tant qu'un joueur le regarde ; le combat joue sur cette règle, face à des joueurs en équipement complet.
+
+- **Le Noir.** Régulièrement, le boss annonce le noir (titre, battement de cœur), puis aveugle (cécité et obscurité) les joueurs proches pendant quelques secondes. Un joueur aveuglé ne le fige plus : le boss se téléporte à deux blocs derrière lui, un craquement positionnel est le seul indice, et il frappe une fraction de seconde plus tard. On esquive en s'éloignant au-delà de la portée de la frappe, ou en retirant l'aveuglement (lait) : un joueur qui voit n'est plus pris pour cible. Le délai raccourcit à chaque phase.
+- **Dégâts réels.** Armure, protections et cœurs d'absorption arrêtent presque tout coup normal d'un équipement complet. La frappe du Noir, l'onde de choc et la mêlée retirent donc en plus une part des PV max du joueur, directement. Un coup mortel passe par un vrai coup (totem d'immortalité, règles de l'île).
+- **Plafond par coup.** Aucun coup ne retire plus de `max-hit-percent` % des PV max du boss : c'est ce plafond qui fixe la durée minimale du combat, quelle que soit la force du coup.
+- **Phases et cœurs.** Sous un seuil de PV, le boss devient invulnérable, la barre de boss change de titre et de couleur et affiche les cœurs restants. Des blocs `CREAKING_HEART` non naturels apparaissent sur des blocs d'air de l'île, à quelques blocs de lui.
+- **Briser un cœur.** Un cœur se frappe (clic gauche répété), il ne se mine pas. Un titre, un message, une barre d'action de progression à chaque coup, une colonne de particules au-dessus de chaque cœur et une boussole (direction et distance du cœur le plus proche, lisible même aveuglé) l'expliquent. Chaque coup retire un point de vie du cœur, sans casser le bloc, donc sans dépendre d'une protection d'île. Explosions, pistons, eau et créatures ne peuvent ni les déplacer ni les casser.
+- Quand le dernier cœur tombe, le boss redevient vulnérable. S'il meurt ou disparaît, tous les cœurs restants sont supprimés et l'aveuglement retiré ; les positions des cœurs sont écrites sur disque pour nettoyer après un arrêt brutal.
 - Le boss ne quitte jamais l'île et ne tombe jamais dans le vide : hors de l'île ou trop bas, il est ramené au centre.
-- Pendant une phase, il ne frappe qu'en mêlée vanille et lance l'onde de choc plus souvent.
+- Pendant une phase, il ne frappe qu'en mêlée vanille et lance l'onde de choc plus souvent ; le Noir continue après un court répit.
 
 ## Dépendances
 

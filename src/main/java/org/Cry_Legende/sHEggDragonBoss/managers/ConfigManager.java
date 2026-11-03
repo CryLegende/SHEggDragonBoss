@@ -232,7 +232,14 @@ public class ConfigManager {
             in.sfx(h + "hit-sound"),
             in.fx(h + "hit-particles", true),
             in.sfx(h + "break-sound"),
-            in.fx(h + "break-particles", true));
+            in.fx(h + "break-particles", true),
+            in.text(h + "hit-actionbar"),
+            in.fx(h + "marker-particles", false),
+            in.integer(h + "marker-particles.interval-ticks", 1),
+            in.decimal(h + "marker-particles.height", 0.5, 32.0),
+            in.text(h + "guide.actionbar"),
+            in.integer(h + "guide.interval-ticks", 1),
+            in.decimal(h + "guide.range", 1.0, 256.0));
         if (hearts.maxDistance() < hearts.minDistance()) {
             in.warn("'" + h + "max-distance' (" + hearts.maxDistance() + ") est inférieur à '" + h + "min-distance' (" + hearts.minDistance()
                 + ") : les cœurs ne pourront jamais être placés.");
@@ -244,6 +251,7 @@ public class ConfigManager {
             in.integer(sw + "cooldown-ticks", 1),
             in.decimal(sw + "radius", 0.5, 64.0),
             in.decimal(sw + "damage", 0.0),
+            in.decimal(sw + "true-damage-percent", 0.0, 100.0),
             in.decimal(sw + "knockback-horizontal", 0.0, 10.0),
             in.decimal(sw + "knockback-vertical", 0.0, 10.0),
             in.decimal(sw + "shield-frequency-factor", 1.0, 100.0),
@@ -260,10 +268,43 @@ public class ConfigManager {
             in.sfx(rs + "sound"),
             in.fx(rs + "particles", true));
 
+        String bo = p + "attacks.blackout.";
+        CreakingSettings.Blackout blackout = new CreakingSettings.Blackout(
+            in.bool(bo + "enabled"),
+            in.integer(bo + "cooldown-ticks", 1),
+            in.decimal(bo + "phase-cooldown-factor", 0.1, 1.0),
+            in.integer(bo + "after-phase-delay-ticks", 0),
+            in.decimal(bo + "radius", 0.5, 128.0),
+            in.integer(bo + "telegraph-ticks", 1),
+            in.integer(bo + "duration-ticks", 20),
+            in.integer(bo + "first-blink-delay-ticks", 1),
+            in.integer(bo + "blink-interval-ticks", 10),
+            in.decimal(bo + "blink-distance", 1.0, 8.0),
+            in.integer(bo + "strike-delay-ticks", 1),
+            in.decimal(bo + "strike-reach", 1.0, 16.0),
+            in.decimal(bo + "strike-damage", 0.0),
+            in.decimal(bo + "strike-true-damage-percent", 0.0, 100.0),
+            in.decimal(bo + "strike-knockback", 0.0, 10.0),
+            readBlindEffects(in, bo + "effects"),
+            in.sfx(bo + "telegraph-sound"),
+            in.fx(bo + "telegraph-particles", true),
+            in.sfx(bo + "blink-sound"),
+            in.fx(bo + "blink-particles", true),
+            in.sfx(bo + "strike-sound"),
+            in.fx(bo + "strike-particles", true),
+            in.sfx(bo + "dodge-sound"));
+
         CreakingSettings.Messages messages = new CreakingSettings.Messages(
+            in.text("messages.creaking.spawn-hint"),
             in.text("messages.creaking.shield-start"),
+            in.text("messages.creaking.shield-title"),
+            in.text("messages.creaking.shield-subtitle"),
+            in.text("messages.creaking.heart-hint"),
             in.text("messages.creaking.heart-destroyed"),
-            in.text("messages.creaking.shield-end"));
+            in.text("messages.creaking.shield-end"),
+            in.text("messages.creaking.blackout-title"),
+            in.text("messages.creaking.blackout-subtitle"),
+            in.text("messages.creaking.dodge"));
 
         return new CreakingSettings(
             in.text(p + "name"),
@@ -271,6 +312,7 @@ public class ConfigManager {
             in.decimal(p + "health", 1.0),
             dynamicStats(in, p),
             in.decimal(p + "attack-damage", 0.0),
+            in.decimal(p + "melee-true-damage-percent", 0.0, 100.0),
             in.decimal(p + "movement-speed", 0.0, 10.0),
             in.decimal(p + "armor", 0.0, 30.0),
             in.decimal(p + "armor-toughness", 0.0, 20.0),
@@ -279,11 +321,13 @@ public class ConfigManager {
             in.bool(p + "assist-activation"),
             in.integer(p + "check-interval-ticks", 1),
             in.damageCauses(p + "immune-damage-causes"),
+            in.decimal(p + "max-hit-percent", 0.0, 100.0),
             arena,
             readPhases(in, p + "phases"),
             hearts,
             shockwave,
             resin,
+            blackout,
             in.sfx(p + "spawn-sound"),
             in.fx(p + "spawn-particles", true),
             in.sfx(p + "death-sound"),
@@ -332,6 +376,19 @@ public class ConfigManager {
                 continue;
             }
             effects.add(new CreakingSettings.Effect(effect, level, ticks));
+        }
+        return List.copyOf(effects);
+    }
+
+    /** Effets du Noir : un type et un niveau (la durée est celle de la fenêtre). Une entrée invalide est ignorée. */
+    private List<CreakingSettings.BlindEffect> readBlindEffects(ConfigReader in, String path) {
+        List<CreakingSettings.BlindEffect> effects = new ArrayList<>();
+        for (Map<?, ?> entry : plugin.getConfig().getMapList(path)) {
+            Object type = entry.get("type");
+            PotionEffectType effect = in.potionEffect(type == null ? null : String.valueOf(type), path);
+            if (effect == null) continue;
+            Object amplifier = entry.get("amplifier");
+            effects.add(new CreakingSettings.BlindEffect(effect, amplifier instanceof Number n && n.intValue() >= 0 ? n.intValue() : 0));
         }
         return List.copyOf(effects);
     }

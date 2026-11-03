@@ -122,6 +122,16 @@ public class PlayerListener implements Listener {
         }
     }
 
+    /** Coup de mêlée vanille du Creaking sur un joueur : le boss y ajoute une part de ses PV max, que l'armure n'arrête pas. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCreakingMelee(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) return;
+        if (event.getCause() != EntityDamageEvent.DamageCause.ENTITY_ATTACK) return;
+        if (bossManager.getController(event.getDamager().getUniqueId()) instanceof CreakingBossController creaking) {
+            creaking.onMeleeHit(victim);
+        }
+    }
+
     @EventHandler
     public void onBossDeath(EntityDeathEvent event) {
         LivingEntity entity = event.getEntity();
