@@ -9,6 +9,7 @@ import org.Cry_Legende.sHEggDragonBoss.config.CreakingSettings;
 import org.Cry_Legende.sHEggDragonBoss.config.DragonSettings;
 import org.Cry_Legende.sHEggDragonBoss.config.DynamicStats;
 import org.Cry_Legende.sHEggDragonBoss.config.Fx;
+import org.Cry_Legende.sHEggDragonBoss.config.Messages;
 import org.Cry_Legende.sHEggDragonBoss.config.Rewards;
 import org.Cry_Legende.sHEggDragonBoss.config.RitualSettings;
 import org.Cry_Legende.sHEggDragonBoss.config.Sfx;
@@ -43,6 +44,7 @@ public class ConfigManager {
     private DragonSettings dragon;
     private CreakingSettings creaking;
     private String islandPermissionName;
+    private int warnings;
 
     public ConfigManager(SHEggDragonBoss plugin) {
         this.plugin = plugin;
@@ -53,16 +55,17 @@ public class ConfigManager {
         plugin.reloadConfig();
         FileConfiguration config = plugin.getConfig();
         ConfigReader in = new ConfigReader(config, plugin.getLogger());
+        Messages m = plugin.getMessages();
 
         common = new CommonMessages(
-            in.text("messages.common.no-permission"),
-            in.text("messages.common.not-on-island"),
-            in.text("messages.common.boss-already-active"));
+            m.text("common.no-permission"),
+            m.text("common.not-on-island"),
+            m.text("common.boss-already-active"));
 
         rituals.clear();
         ritualsByBlock.clear();
         for (BossType type : BossType.values()) {
-            RitualSettings ritual = readRitual(in, type);
+            RitualSettings ritual = readRitual(in, m, type);
             if (ritual == null) continue;
             rituals.put(type, ritual);
             if (!ritual.enabled()) continue;
@@ -75,14 +78,15 @@ public class ConfigManager {
             }
         }
 
-        dragon = readDragon(in);
-        creaking = readCreaking(in);
+        dragon = readDragon(in, m);
+        creaking = readCreaking(in, m);
         islandPermissionName = in.rawText("island-permission.name");
         if (islandPermissionName.isEmpty()) {
             in.warn("Le nom de la permission d'île ('island-permission.name') est vide : EGG_HATCH est utilisé.");
             islandPermissionName = "EGG_HATCH";
         }
 
+        warnings = in.warnings();
         if (in.warnings() > 0) {
             plugin.getLogger().warning(in.warnings() + " avertissement(s) à la lecture de config.yml : corrigez le fichier, les valeurs livrées ont été utilisées.");
         }
@@ -90,7 +94,7 @@ public class ConfigManager {
 
     // ------------------------------------------------------------------ rituels
 
-    private RitualSettings readRitual(ConfigReader in, BossType type) {
+    private RitualSettings readRitual(ConfigReader in, Messages m, BossType type) {
         String p = "rituals." + type.id() + ".";
         boolean enabled = in.bool(p + "enabled");
         Material block = in.block(p + "block");
@@ -109,8 +113,8 @@ public class ConfigManager {
 
         RitualSettings.Hologram hologram = new RitualSettings.Hologram(
             prefix,
-            in.textList(p + "hologram.progress"),
-            in.textList(p + "hologram.countdown"),
+            m.lines("rituals." + type.id() + ".hologram.progress"),
+            m.lines("rituals." + type.id() + ".hologram.countdown"),
             in.decimal(p + "hologram.height", -64.0, 64.0),
             in.bool(p + "hologram.text-shadow"),
             in.decimal(p + "hologram.countdown-height", -64.0, 64.0),
@@ -146,8 +150,8 @@ public class ConfigManager {
             animation,
             sounds,
             particles,
-            in.text("messages." + type.id() + ".ritual-started"),
-            in.text("messages." + type.id() + ".ritual-locked"));
+            m.text("rituals." + type.id() + ".started"),
+            m.text("rituals." + type.id() + ".locked"));
     }
 
     private static RitualSettings disabled(RitualSettings r) {
@@ -157,14 +161,14 @@ public class ConfigManager {
 
     // ------------------------------------------------------------------ boss n°1 : dragon
 
-    private DragonSettings readDragon(ConfigReader in) {
+    private DragonSettings readDragon(ConfigReader in, Messages m) {
         String p = "bosses.dragon.";
         double stoppingDistance = in.decimal(p + "stopping-distance", 0.0);
         double meleeRange = in.decimal(p + "melee-range", 0.0);
         return new DragonSettings(
             in.livingEntityType(p + "entity-type"),
-            in.text(p + "name"),
-            in.text(p + "bossbar.title"),
+            m.text("bosses.dragon.name"),
+            m.text("bosses.dragon.bossbar-title"),
             in.enumValue(p + "bossbar.color", BarColor.class),
             in.enumValue(p + "bossbar.style", BarStyle.class),
             in.decimal(p + "health", 1.0),
@@ -203,13 +207,14 @@ public class ConfigManager {
 
     // ------------------------------------------------------------------ boss n°2 : creaking
 
-    private CreakingSettings readCreaking(ConfigReader in) {
+    private CreakingSettings readCreaking(ConfigReader in, Messages m) {
         String p = "bosses.creaking.";
+        String t = "bosses.creaking.";
         CreakingSettings.Bar bar = new CreakingSettings.Bar(
-            in.text(p + "bossbar.title"),
+            m.text(t + "bossbar-title"),
             in.enumValue(p + "bossbar.color", BarColor.class),
             in.enumValue(p + "bossbar.style", BarStyle.class),
-            in.text(p + "bossbar.shield-title"),
+            m.text(t + "bossbar-shield-title"),
             in.enumValue(p + "bossbar.shield-color", BarColor.class),
             in.enumValue(p + "bossbar.shield-style", BarStyle.class));
 
@@ -233,13 +238,15 @@ public class ConfigManager {
             in.fx(h + "hit-particles", true),
             in.sfx(h + "break-sound"),
             in.fx(h + "break-particles", true),
-            in.text(h + "hit-actionbar"),
+            m.text(t + "hit-actionbar"),
             in.fx(h + "marker-particles", false),
             in.integer(h + "marker-particles.interval-ticks", 1),
             in.decimal(h + "marker-particles.height", 0.5, 32.0),
-            in.text(h + "guide.actionbar"),
+            m.text(t + "guide-actionbar"),
             in.integer(h + "guide.interval-ticks", 1),
-            in.decimal(h + "guide.range", 1.0, 256.0));
+            in.decimal(h + "guide.range", 1.0, 256.0),
+            in.bool(h + "glow"),
+            in.rgb(h + "glow-color"));
         if (hearts.maxDistance() < hearts.minDistance()) {
             in.warn("'" + h + "max-distance' (" + hearts.maxDistance() + ") est inférieur à '" + h + "min-distance' (" + hearts.minDistance()
                 + ") : les cœurs ne pourront jamais être placés.");
@@ -294,20 +301,20 @@ public class ConfigManager {
             in.fx(bo + "strike-particles", true),
             in.sfx(bo + "dodge-sound"));
 
-        CreakingSettings.Messages messages = new CreakingSettings.Messages(
-            in.text("messages.creaking.spawn-hint"),
-            in.text("messages.creaking.shield-start"),
-            in.text("messages.creaking.shield-title"),
-            in.text("messages.creaking.shield-subtitle"),
-            in.text("messages.creaking.heart-hint"),
-            in.text("messages.creaking.heart-destroyed"),
-            in.text("messages.creaking.shield-end"),
-            in.text("messages.creaking.blackout-title"),
-            in.text("messages.creaking.blackout-subtitle"),
-            in.text("messages.creaking.dodge"));
+        CreakingSettings.Texts texts = new CreakingSettings.Texts(
+            m.text(t + "spawn-hint"),
+            m.text(t + "shield-start"),
+            m.text(t + "shield-title"),
+            m.text(t + "shield-subtitle"),
+            m.text(t + "heart-hint"),
+            m.text(t + "heart-destroyed"),
+            m.text(t + "shield-end"),
+            m.text(t + "blackout-title"),
+            m.text(t + "blackout-subtitle"),
+            m.text(t + "dodge"));
 
         return new CreakingSettings(
-            in.text(p + "name"),
+            m.text(t + "name"),
             bar,
             in.decimal(p + "health", 1.0),
             dynamicStats(in, p),
@@ -338,7 +345,7 @@ public class ConfigManager {
             in.fx(p + "shield-aura-particles", true),
             in.integer(p + "shield-aura-particles.interval-ticks", 1),
             rewards(in, p + "rewards."),
-            messages);
+            texts);
     }
 
     /** Phases d'invulnérabilité, de la plus haute à la plus basse part de PV. Une entrée invalide est ignorée. */
@@ -426,6 +433,11 @@ public class ConfigManager {
     }
 
     // ------------------------------------------------------------------ accès
+
+    /** Avertissements de lecture de config.yml au dernier chargement. */
+    public int warnings() {
+        return warnings;
+    }
 
     public CommonMessages common() {
         return common;

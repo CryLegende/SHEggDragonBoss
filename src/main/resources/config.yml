@@ -10,20 +10,19 @@
 # Une île n'a jamais qu'un seul boss (n'importe lequel) ou rituel en cours à la fois.
 #
 # Organisation du fichier :
-#   messages          : textes envoyés aux joueurs (communs, puis par boss)
 #   rituals           : bloc, objet, quantité, compte à rebours, hologramme et animation de chaque rituel
 #   sounds            : sons de chaque rituel
 #   bosses            : réglages de combat de chaque boss
 #   island-permission : privilège d'île (SuperiorSkyblock2) nécessaire pour lancer un rituel
 #
-# Ce fichier est lu au démarrage du serveur (pas de rechargement à chaud).
+# Les textes (messages, titres, noms, barres de boss, hologrammes, lores) sont dans messages.yml.
+# Ce fichier est lu au démarrage du serveur et par /sheggdragonboss reload (les boss en cours appliquent les
+# nouveaux réglages au tick suivant ; le nom du privilège d'île n'est lu qu'au démarrage).
 # Une clé absente ou une valeur invalide (matériau, son, particule, entité, effet inconnu...) produit un
 # avertissement dans la console et la valeur livrée avec le plugin est utilisée. Rien ne plante.
 #
 # Conventions :
 #   Couleurs      : codes Minecraft avec '&'. Exemple : '&cRouge &l&ngras souligné'.
-#   Messages      : préfixe « &7&l« &<couleur>&lSH &8&l» &7 », texte gris, mots importants en couleur.
-#                   Un message vide ("") n'est pas envoyé.
 #   Sons          : nom Bukkit (ENTITY_ENDER_DRAGON_GROWL) ou clé (minecraft:entity.ender_dragon.growl).
 #                   Chaque son a un volume (0 = muet, au-delà de 1 le son porte plus loin) et une hauteur
 #                   (pitch : 0.5 grave à 2.0 aigu). Un nom vide ("") désactive le son.
@@ -33,61 +32,12 @@
 #   Listes        : une liste vide s'écrit '[]'. Attention : une liste laissée sans valeur reprend la liste livrée.
 
 # ----------------------------------------------------------------#
-#                            MESSAGES                             #
-# ----------------------------------------------------------------#
-messages:
-  # Messages communs aux deux rituels.
-  common:
-    # Le joueur n'a pas le privilège d'île (voir island-permission).
-    no-permission: "&7&l« &c&lSH &8&l» &7Vous n'avez pas la permission de faire cela sur cette île."
-    # Le bloc cliqué n'est pas sur une île. Vide : aucun message.
-    not-on-island: ""
-    # Un boss (de n'importe quel type) est déjà en vie ou endormi sur l'île, ou un rituel est déjà en compte à rebours.
-    boss-already-active: "&7&l« &c&lSH &8&l» &7Vous ne pouvez pas lancer un autre rituel tant qu'un boss est en vie sur votre île !"
-
-  # Boss n°1 : le dragon.
-  dragon:
-    # Premier éclat donné à l'œuf.
-    ritual-started: "&7&l« &5&lSH &8&l» &7L'éclat d'écho provoque une réaction sur l'oeuf de dragon..."
-    # Interaction ou casse de l'œuf pendant le compte à rebours.
-    ritual-locked: "&7&l« &5&lSH &8&l» &7Cet oeuf est sur le point d'éclore et ne peut plus être touché !"
-
-  # Boss n°2 : le Creaking.
-  # Placeholders du combat : {hearts} cœurs restants, {phase} phase en cours, {phases} nombre de phases,
-  # {player} joueur qui vient de briser un cœur (seulement dans heart-destroyed), {name} nom du boss.
-  creaking:
-    # Première brique de résine donnée au cœur.
-    ritual-started: "&7&l« &e&lSH &8&l» &7La résine réagit au &ecœur du Creaking&7..."
-    # Interaction ou casse du cœur pendant le compte à rebours.
-    ritual-locked: "&7&l« &c&lSH &8&l» &7Ce cœur est sur le point de s'éveiller et ne peut plus être touché !"
-    # Le boss apparaît : envoyé une fois aux joueurs de l'île, il explique la règle du regard.
-    spawn-hint: "&7&l« &2&lSH &8&l» &7Le Creaking &2se fige &7tant qu'on le &eregarde&7. Quand le &8noir &7tombe, plus rien ne l'arrête : écoutez ses &8craquements&7."
-    # Le boss passe sous un seuil de PV : il devient invulnérable et des cœurs apparaissent autour de lui.
-    shield-start: "&7&l« &6&lSH &8&l» &7Le Creaking devient &6invulnérable &7! &eFrappez &7les &6{hearts} cœurs &7qui l'entourent : &eclic gauche répété&7, un cœur ne se mine pas."
-    # Titre et sous-titre affichés à l'écran au début d'une phase. Vide : aucun.
-    shield-title: "&6&lFRAPPEZ LES CŒURS"
-    shield-subtitle: "&7Clic gauche répété sur chacun des &e{hearts} &7cœurs"
-    # Envoyé une seule fois à chaque joueur, au premier coup qu'il donne à un cœur pendant le combat.
-    heart-hint: "&7&l« &e&lSH &8&l» &7Continuez de &efrapper &7(clic gauche répété) : un cœur ne se &cmine pas&7, il s'use sous les coups."
-    # Un cœur est brisé et il en reste d'autres.
-    heart-destroyed: "&7&l« &e&lSH &8&l» &e{player} &7brise un cœur. Cœurs restants : &e{hearts}&7."
-    # Le dernier cœur est tombé : le boss peut de nouveau être blessé.
-    shield-end: "&7&l« &a&lSH &8&l» &7Le dernier cœur est tombé : le Creaking est de nouveau &avulnérable &7!"
-    # Le Noir approche : titre et sous-titre affichés aux joueurs à portée. Vide : aucun.
-    blackout-title: "&8&lLe noir tombe..."
-    blackout-subtitle: "&7Il ne s'arrête plus. &eÉcoutez&7 et &eécartez-vous&7."
-    # Barre d'action du joueur qui esquive la frappe du boss.
-    dodge: "&a&lEsquivé !"
-
-# ----------------------------------------------------------------#
 #                            RITUELS                              #
 # ----------------------------------------------------------------#
 # Un rituel : clic droit sur le bloc avec l'objet (Shift = toute la pile) jusqu'à la quantité requise.
 # Le bloc est alors consommé et un affichage du bloc grossit pendant le compte à rebours, puis le boss apparaît.
 # Casser le bloc avant le compte à rebours rend les objets donnés ; pendant le compte à rebours c'est refusé.
-#
-# Textes d'hologramme : {current} objets déjà donnés, {required} objets requis, {time} secondes restantes
-# (seulement dans countdown).
+# Les textes (messages du rituel, hologramme) sont dans messages.yml, section rituals.
 rituals:
   dragon:
     # false : ce rituel est ignoré (le bloc redevient un bloc ordinaire).
@@ -112,14 +62,6 @@ rituals:
       # Hauteur et taille (échelle) de l'hologramme PENDANT le compte à rebours.
       countdown-height: 2.5
       countdown-scale: 3.0
-      # Texte avant le compte à rebours.
-      progress:
-        - "&d&lÉclosion de l'œuf"
-        - "&f{current} &7/&f {required} &dFragments"
-      # Texte pendant le compte à rebours.
-      countdown:
-        - "&c&lÉCLOSION IMMINENTE"
-        - "&e&l{time}"
     # Animation du bloc pendant le compte à rebours.
     animation:
       # Taille ajoutée à la fin du compte à rebours (1.5 : le bloc passe de 1 à 2.5 fois sa taille).
@@ -159,12 +101,6 @@ rituals:
       text-shadow: true
       countdown-height: 2.5
       countdown-scale: 3.0
-      progress:
-        - "&6&lRituel du Creaking"
-        - "&f{current} &7/&f {required} &6Briques de résine"
-      countdown:
-        - "&c&lÉVEIL IMMINENT"
-        - "&e&l{time}"
     animation:
       growth: 1.5
       levitation: 0.35
@@ -228,11 +164,9 @@ bosses:
   dragon:
     # Type de créature : une créature vivante invocable (PHANTOM).
     entity-type: "PHANTOM"
-    name: "&5Jeune Ender Dragon"
-    # Barre de boss vue par les membres de l'île. Placeholders : {name}, {current_health}, {max_health}.
+    # Barre de boss vue par les membres de l'île (titre : messages.yml, bosses.dragon).
     # color : PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE. style : SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20.
     bossbar:
-      title: "{name} &7- &c&l{current_health} &4/ &c&l{max_health} &4❤"
       color: "PURPLE"
       style: "SOLID"
     # PV de base. Les PV réels ajoutent dynamic-stats (voir plus bas).
@@ -343,14 +277,11 @@ bosses:
   # Il ne quitte jamais l'île.
   # ---------------------------------------------------------------
   creaking:
-    name: "&2Creaking"
-    # Barre de boss. Placeholders : {name}, {current_health}, {max_health} et, pendant une phase, {hearts}, {phase}, {phases}.
-    # La barre change de titre, de couleur et de style pendant une phase d'invulnérabilité (shield-*).
+    # Barre de boss (titres : messages.yml, bosses.creaking). Elle change de titre, de couleur et de style
+    # pendant une phase d'invulnérabilité (shield-*).
     bossbar:
-      title: "{name} &7- &c&l{current_health} &4/ &c&l{max_health} &4❤"
       color: "WHITE"
       style: "SOLID"
-      shield-title: "{name} &7- &6&lINVULNÉRABLE &7- &eFrappez les cœurs &7: &c&l{hearts}"
       shield-color: "RED"
       shield-style: "SOLID"
 
@@ -416,13 +347,13 @@ bosses:
         hearts: 5
 
     # --- CŒURS ---
-    # Blocs CREAKING_HEART posés par le plugin sur des blocs d'air de l'île, jamais entre deux bûches de chêne pâle (sinon le cœur s'éveille la nuit et fait apparaître un Creaking vanilla),
-    # dans la couche du boss, avec un bloc solide dessous quand c'est possible, sinon en l'air. Ils ne remplacent jamais un bloc.
-    # On les détruit en les frappant (clic gauche), sans casser le bloc : aucune protection d'île ne les bloque.
+    # Des cœurs éveillés flottent sur des blocs d'air de l'île, dans la couche du boss, avec un bloc solide dessous quand
+    # c'est possible. Ce sont des affichages de bloc (pas de vrais blocs) : ils ne comptent pas dans le niveau de l'île,
+    # ne se minent pas et aucune protection d'île ne les bloque. On les détruit en les frappant (clic gauche, maintenu ou répété).
     hearts:
-      # Nombre de coups (clics gauches) pour détruire un cœur. Le bloc ne se mine pas : maintenir le clic ne compte pas.
+      # Nombre de coups pour détruire un cœur.
       hits-to-break: 6
-      # Délai minimal entre deux coups d'un même joueur, en secondes (anti-spam).
+      # Délai minimal entre deux coups d'un même joueur, en secondes (anti-spam, aussi quand le clic est maintenu).
       hit-cooldown-seconds: 0.3
       # Distance au boss, en blocs, entre min-distance et max-distance.
       min-distance: 4.0
@@ -465,9 +396,7 @@ bosses:
         count: 20
         spread: 0.4
         speed: 0.05
-      # Barre d'action du joueur à chaque coup qui ne détruit pas le cœur. {bar} = coups donnés (vert) et restants (gris),
-      # {done} coups donnés, {total} coups nécessaires.
-      hit-actionbar: "&6❤ Cœur &8» {bar} &7{done}/{total} &8- &eclic gauche répété"
+      # Le joueur voit sa progression dans la barre d'action à chaque coup qui ne détruit pas le cœur (hit-actionbar, messages.yml).
       # Colonne de particules au-dessus de chaque cœur, visible de loin. count = nombre de particules dans la colonne,
       # height = hauteur de la colonne en blocs, interval-ticks = délai entre deux rafraîchissements.
       marker-particles:
@@ -476,11 +405,12 @@ bosses:
         speed: 0.0
         height: 5.0
         interval-ticks: 6
-      # Boussole : à tous les joueurs de l'île à moins de `range` blocs du boss, tant qu'il reste des cœurs.
-      # {arrow} = direction du cœur le plus proche par rapport au regard du joueur, {distance} = distance en blocs,
-      # {hearts} = cœurs restants. Lisible même quand le joueur est aveuglé.
+      # Contour lumineux visible à travers les blocs (true/false) et sa couleur (RRGGBB).
+      glow: true
+      glow-color: "FFAA00"
+      # Boussole (guide-actionbar, messages.yml) : à tous les joueurs de l'île à moins de `range` blocs du boss, tant qu'il
+      # reste des cœurs. Lisible même quand le joueur est aveuglé.
       guide:
-        actionbar: "&6❤ &7Cœurs restants : &e{hearts} &8» &7le plus proche : &e{arrow} {distance} m &8- &eclic gauche répété"
         interval-ticks: 10
         range: 64.0
 

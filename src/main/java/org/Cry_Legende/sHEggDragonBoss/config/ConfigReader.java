@@ -304,6 +304,24 @@ public final class ConfigReader {
         return particle == null ? Fx.NONE : new Fx(particle, count, spread, speed);
     }
 
+    /** Couleur « RRGGBB » (hexadécimal, avec ou sans #) ; sinon la valeur livrée, sinon blanc. */
+    public int rgb(String path) {
+        Object value = valueOrShipped(path);
+        Integer parsed = parseRgb(value);
+        if (parsed != null) return parsed;
+        Integer fallback = parseRgb(shipped(path));
+        if (value != null) warn("Couleur invalide pour '" + path + "' : '" + value + "' (RRGGBB attendu, par exemple FFAA00)."
+            + (fallback != null ? " Utilisation de " + String.format("%06X", fallback) + "." : ""));
+        return fallback != null ? fallback : 0xFFFFFF;
+    }
+
+    private static Integer parseRgb(Object value) {
+        if (value == null) return null;
+        String text = String.valueOf(value).trim();
+        if (text.startsWith("#")) text = text.substring(1);
+        return text.matches("[0-9a-fA-F]{6}") ? Integer.parseInt(text, 16) : null;
+    }
+
     // ------------------------------------------------------------------ conversions
 
     private static Integer asInt(Object value) {

@@ -1,0 +1,182 @@
+##=====================================================================##
+#|                  SHEggDragonBoss - Messages                         |#
+#|                                                                     |#
+#|  Couleurs : codes & classiques, et &#RRGGBB pour l'hexadécimal.      |#
+#|  Un message vide ("") n'est jamais envoyé.                          |#
+#|  Une liste donne un texte de plusieurs lignes (hologrammes, lores). |#
+#|  Les messages de chat portent leur préfixe typé :                   |#
+#|    &7&l« &<couleur>&lSH &8&l» &7texte en gris et &<couleur>mots clés |#
+#|    &a succès, &e information, &6avertissement, &c erreur.            |#
+#|  Les titres, barres d'action, noms, barres de boss, hologrammes     |#
+#|  et lores n'ont pas de préfixe.                                     |#
+#|                                                                     |#
+#|  Placeholders : indiqués avant chaque message, écrits %comme-ceci%. |#
+##=====================================================================##
+# Ce fichier est relu par /sheggdragonboss reload. Une clé absente reprend le texte livré avec le plugin
+# (avec un avertissement dans la console).
+
+# ----------------------------------------------------------------#
+#                         MESSAGES COMMUNS                        #
+# ----------------------------------------------------------------#
+common:
+  # Le joueur n'a pas le privilège d'île de la section island-permission de config.yml.
+  no-permission: "&7&l« &c&lSH &8&l» &7Vous n'avez pas la permission de faire cela sur cette île."
+  # Le bloc cliqué n'est pas sur une île. Vide : aucun message.
+  not-on-island: ""
+  # Un boss (de n'importe quel type) est déjà en vie ou endormi sur l'île, ou un rituel est déjà en compte à rebours.
+  boss-already-active: "&7&l« &c&lSH &8&l» &7Vous ne pouvez pas lancer un autre rituel tant qu'un boss est en vie sur votre île !"
+
+# ----------------------------------------------------------------#
+#                      COMMANDE /sheggdragonboss                  #
+# ----------------------------------------------------------------#
+commands:
+  no-permission: "&7&l« &c&lSH &8&l» &7Vous n'avez pas la permission d'utiliser cette commande."
+  # Placeholder : %label% la commande tapée.
+  unknown: "&7&l« &c&lSH &8&l» &7Sous-commande inconnue. Tapez &c/%label% help&7."
+  help:
+    header: "&e--- Aide SHEggDragonBoss (/%label%) ---"
+    reload: "&e/%label% reload &7- Recharge config.yml et messages.yml."
+    give: "&e/%label% give <joueur> <coeur|briques> [quantité] &7- Donne le cœur ou les briques de résine du Creaking."
+    footer: "&e--------------------------------------"
+  # Placeholder : %warnings% nombre d'avertissements de lecture de config.yml et de messages.yml.
+  reloaded: "&7&l« &a&lSH &8&l» &7Configuration et messages &arechargés&7 (&a%warnings% &7avertissement(s)). Les boss en cours appliquent les nouveaux réglages."
+  # Placeholder : %error% la cause.
+  reload-failed: "&7&l« &c&lSH &8&l» &7Le rechargement a échoué : &c%error%&7. Voir la console."
+  # Placeholder : %label%.
+  give-usage: "&7&l« &c&lSH &8&l» &7Usage : &c/%label% give <joueur> <coeur|briques> [quantité]"
+  # Placeholder : %player%.
+  player-not-found: "&7&l« &c&lSH &8&l» &7Joueur &c%player% &7introuvable ou hors ligne."
+  # Placeholders : %amount% la valeur saisie, %max% la quantité maximale.
+  invalid-amount: "&7&l« &c&lSH &8&l» &7Quantité invalide : &c%amount%&7 (de 1 à &c%max%&7)."
+  # Placeholder : %item% la valeur saisie.
+  invalid-item: "&7&l« &c&lSH &8&l» &7Objet inconnu : &c%item%&7. Choix : &ccoeur&7, &cbriques&7."
+  # Le rituel du Creaking est désactivé ou inutilisable (config.yml).
+  ritual-disabled: "&7&l« &c&lSH &8&l» &7Le rituel du Creaking est désactivé : impossible de créer ses objets."
+  # Placeholders : %amount%, %item% (nom de l'objet, voir item-names), %player%.
+  give-success: "&7&l« &a&lSH &8&l» &7Vous avez donné &a%amount% %item% &7à &a%player%&7."
+  item-names:
+    heart: "cœur(s) du Creaking"
+    bricks: "brique(s) de résine"
+  # Envoyé au joueur dont l'inventaire est plein : l'objet est posé à ses pieds.
+  inventory-full: "&7&l« &6&lSH &8&l» &7Votre inventaire est plein : l'objet a été posé &6au sol&7."
+
+# ----------------------------------------------------------------#
+#                             RITUELS                             #
+# ----------------------------------------------------------------#
+# started : premier objet donné au bloc. locked : interaction ou casse du bloc pendant le compte à rebours.
+# Hologramme au-dessus du bloc. Placeholders : %current% objets donnés, %required% objets requis, %time% secondes
+# restantes (seulement dans countdown).
+rituals:
+  dragon:
+    started: "&7&l« &5&lSH &8&l» &7L'éclat d'écho provoque une réaction sur l'oeuf de dragon..."
+    locked: "&7&l« &5&lSH &8&l» &7Cet oeuf est sur le point d'éclore et ne peut plus être touché !"
+    hologram:
+      # Avant le compte à rebours.
+      progress:
+        - "&d&lÉclosion de l'œuf"
+        - "&f%current% &7/&f %required% &dFragments"
+      # Pendant le compte à rebours.
+      countdown:
+        - "&c&lÉCLOSION IMMINENTE"
+        - "&e&l%time%"
+  creaking:
+    started: "&7&l« &e&lSH &8&l» &7La résine réagit au &ecœur du Creaking&7..."
+    locked: "&7&l« &c&lSH &8&l» &7Ce cœur est sur le point de s'éveiller et ne peut plus être touché !"
+    hologram:
+      progress:
+        - "&6&lRituel du Creaking"
+        - "&f%current% &7/&f %required% &6Briques de résine"
+      countdown:
+        - "&c&lÉVEIL IMMINENT"
+        - "&e&l%time%"
+
+# ----------------------------------------------------------------#
+#                              BOSS                               #
+# ----------------------------------------------------------------#
+bosses:
+  # Boss n°1 : le dragon.
+  dragon:
+    # Nom affiché au-dessus du boss.
+    name: "&5Jeune Ender Dragon"
+    # Barre de boss. Placeholders : %name%, %current_health%, %max_health%.
+    bossbar-title: "%name% &7- &c&l%current_health% &4/ &c&l%max_health% &4❤"
+
+  # Boss n°2 : le Creaking.
+  # Placeholders du combat : %hearts% cœurs restants, %phase% phase en cours, %phases% nombre de phases,
+  # %player% joueur qui vient de briser un cœur (seulement dans heart-destroyed), %name% nom du boss.
+  creaking:
+    name: "&2Creaking"
+    # Barre de boss normale, puis pendant une phase d'invulnérabilité (couleur et style : config.yml).
+    # Placeholders en plus : %current_health%, %max_health%.
+    bossbar-title: "%name% &7- &c&l%current_health% &4/ &c&l%max_health% &4❤"
+    bossbar-shield-title: "%name% &7- &6&lINVULNÉRABLE &7- &eFrappez les cœurs &7: &c&l%hearts%"
+    # Le boss apparaît : envoyé une fois aux joueurs de l'île, il explique la règle du regard.
+    spawn-hint: "&7&l« &2&lSH &8&l» &7Le Creaking &2se fige &7tant qu'on le &eregarde&7. Quand le &8noir &7tombe, plus rien ne l'arrête : écoutez ses &8craquements&7."
+    # Le boss passe sous un seuil de PV : il devient invulnérable et des cœurs apparaissent autour de lui.
+    shield-start: "&7&l« &6&lSH &8&l» &7Le Creaking devient &6invulnérable &7! &eFrappez &7les &6%hearts% cœurs &7qui l'entourent : &eclic gauche répété&7, un cœur ne se mine pas."
+    # Titre et sous-titre affichés à l'écran au début d'une phase. Vide : aucun.
+    shield-title: "&6&lFRAPPEZ LES CŒURS"
+    shield-subtitle: "&7Clic gauche répété sur chacun des &e%hearts% &7cœurs"
+    # Envoyé une seule fois à chaque joueur, au premier coup qu'il donne à un cœur pendant le combat.
+    heart-hint: "&7&l« &e&lSH &8&l» &7Continuez de &efrapper &7(clic gauche répété) : un cœur ne se &cmine pas&7, il s'use sous les coups."
+    # Barre d'action à chaque coup qui ne détruit pas le cœur. Placeholders : %bar% coups donnés (vert) et restants (gris),
+    # %done% coups donnés, %total% coups nécessaires.
+    hit-actionbar: "&6❤ Cœur &8» %bar% &7%done%/%total% &8- &eclic gauche répété"
+    # Boussole : barre d'action de tous les joueurs de l'île proches du boss, tant qu'il reste des cœurs.
+    # %arrow% direction du cœur le plus proche par rapport au regard du joueur, %distance% distance en blocs.
+    guide-actionbar: "&6❤ &7Cœurs restants : &e%hearts% &8» &7le plus proche : &e%arrow% %distance% m &8- &eclic gauche répété"
+    # Un cœur est brisé et il en reste d'autres.
+    heart-destroyed: "&7&l« &e&lSH &8&l» &e%player% &7brise un cœur. Cœurs restants : &e%hearts%&7."
+    # Le dernier cœur est tombé : le boss peut de nouveau être blessé.
+    shield-end: "&7&l« &a&lSH &8&l» &7Le dernier cœur est tombé : le Creaking est de nouveau &avulnérable &7!"
+    # Le Noir approche : titre et sous-titre affichés aux joueurs à portée. Vide : aucun.
+    blackout-title: "&8&lLe noir tombe..."
+    blackout-subtitle: "&7Il ne s'arrête plus. &eÉcoutez&7 et &eécartez-vous&7."
+    # Barre d'action du joueur qui esquive la frappe du boss.
+    dodge: "&a&lEsquivé !"
+
+# ----------------------------------------------------------------#
+#                              OBJETS                             #
+# ----------------------------------------------------------------#
+# Lore des objets donnés par /sheggdragonboss give (boîtes, temps de jeu, VoteParty, boss de l'œuf).
+# Pour le rituel ce sont des CREAKING_HEART et RESIN_BRICK ordinaires ; le lore explique à quoi ils servent.
+# Placeholder : %required% briques nécessaires au rituel.
+items:
+  creaking-heart:
+    lore:
+      - "&8Rituel du Creaking"
+      - "&7Posez-le sur votre île, puis faites un"
+      - "&7clic droit avec &a%required% briques de résine &7pour"
+      - "&7réveiller le boss &2Creaking&7. Un seul par île."
+      - ""
+      - "&8Se revend en boutique (Divers)."
+  resin-brick:
+    lore:
+      - "&8Rituel du Creaking"
+      - "&7Donnez-en &a%required% &7au cœur du Creaking"
+      - "&7posé sur votre île (clic droit) pour"
+      - "&7réveiller le boss &2Creaking&7."
+      - ""
+      - "&8Se revend en boutique (Divers)."
+
+# ----------------------------------------------------------------#
+#                 JOURNAL DES BOSS (logs/boss-log-*.log)          #
+# ----------------------------------------------------------------#
+# Une ligne par évènement, horodatée par le plugin. Pas de codes couleur.
+# Placeholders : %island% (voir island-of), %health% et %max% PV, %phase% %phases% %hearts% pour le Creaking,
+# %killer% le tueur, %players% nombre de joueurs touchés par le Noir.
+journal:
+  island-of: "l'île de %owner%"
+  island-unknown: "une île inconnue"
+  killer-unknown: "Cause inconnue"
+  dragon-spawned: "Un boss est apparu sur %island% (Vie: %health%/%max%)."
+  dragon-woken: "Un boss dormant a été réveillé sur %island% (Vie: %health%/%max%)."
+  dragon-restored: "Un boss a été restauré sur %island% (Vie: %health%/%max%)."
+  dragon-killed: "Le boss sur %island% a été tué par %killer%."
+  creaking-spawned: "Un boss Creaking est apparu sur %island% (Vie: %health%/%max%)."
+  creaking-woken: "Un boss Creaking dormant a été réveillé sur %island% (Vie: %health%/%max%, phase %phase%/%phases%, %hearts% cœur(s) à détruire)."
+  creaking-restored: "Un boss Creaking a été restauré sur %island% après un redémarrage (phase %phase%/%phases%, %hearts% cœur(s) à détruire)."
+  creaking-killed: "Le boss Creaking sur %island% a été tué par %killer%."
+  creaking-blackout: "Boss Creaking sur %island% : le Noir tombe sur %players% joueur(s)."
+  creaking-phase-start: "Boss Creaking sur %island% : phase %phase%/%phases%, %hearts% cœur(s) à détruire (Vie: %health%/%max%)."
+  creaking-phase-end: "Boss Creaking sur %island% : phase %phase%/%phases% terminée, le boss est de nouveau vulnérable (Vie: %health%/%max%)."

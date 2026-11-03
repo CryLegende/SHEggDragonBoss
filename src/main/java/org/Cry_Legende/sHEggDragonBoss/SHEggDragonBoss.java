@@ -2,6 +2,8 @@ package org.Cry_Legende.sHEggDragonBoss;
 
 import com.bgsoftware.superiorskyblock.api.island.IslandPrivilege;
 import de.oliver.fancyholograms.api.FancyHologramsPlugin;
+import org.Cry_Legende.sHEggDragonBoss.commands.BossCommand;
+import org.Cry_Legende.sHEggDragonBoss.config.Messages;
 import org.Cry_Legende.sHEggDragonBoss.listeners.HeartListener;
 import org.Cry_Legende.sHEggDragonBoss.listeners.PlayerListener;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
@@ -12,6 +14,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.persistence.PersistentDataType;
@@ -23,6 +26,7 @@ public final class SHEggDragonBoss extends JavaPlugin {
 
     private static SHEggDragonBoss instance;
     private ConfigManager configManager;
+    private Messages messages;
     private BossManager bossManager;
     private HeartManager heartManager;
     private FancyHologramsPlugin fancyHologramsPlugin;
@@ -52,7 +56,9 @@ public final class SHEggDragonBoss extends JavaPlugin {
     public void onLoad() {
         instance = this; // On initialise l'instance tôt pour le ConfigManager
 
-        // 1. On doit charger la configuration MAINTENANT pour connaître le nom de la permission
+        // 1. On doit charger la configuration MAINTENANT pour connaître le nom de la permission ; les textes d'abord (le ConfigManager les lit)
+        this.messages = new Messages(this);
+        messages.load();
         this.configManager = new ConfigManager(this);
         configManager.loadConfig();
 
@@ -90,6 +96,13 @@ public final class SHEggDragonBoss extends JavaPlugin {
         // Le SuperiorListener a été supprimé car sa logique est maintenant dans onLoad.
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(new HeartListener(heartManager), this);
+
+        PluginCommand command = getCommand("sheggdragonboss");
+        if (command != null) {
+            BossCommand bossCommand = new BossCommand(this);
+            command.setExecutor(bossCommand);
+            command.setTabCompleter(bossCommand);
+        }
 
         getLogger().info("SHEggDragonBoss a été activé avec succès !");
     }
@@ -185,8 +198,24 @@ public final class SHEggDragonBoss extends JavaPlugin {
         if (restoredBosses > 0) getLogger().info(restoredBosses + " boss actifs ont été restaurés.");
     }
 
+    /**
+     * Relit messages.yml puis config.yml. Les boss en cours reprennent les nouveaux réglages à leur tick suivant ;
+     * le nom du privilège d'île (island-permission) n'est lu qu'au démarrage.
+     *
+     * @return le nombre d'avertissements de lecture des deux fichiers
+     */
+    public int reloadAll() {
+        messages.load();
+        configManager.loadConfig();
+        return messages.warnings() + configManager.warnings();
+    }
+
     public static SHEggDragonBoss getInstance() {
         return instance;
+    }
+
+    public Messages getMessages() {
+        return messages;
     }
 
     public ConfigManager getConfigManager() {

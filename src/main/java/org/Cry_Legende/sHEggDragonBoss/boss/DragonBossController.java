@@ -21,7 +21,7 @@ import org.bukkit.util.Vector;
  */
 public class DragonBossController extends BossController {
 
-    private final DragonSettings settings;
+    private DragonSettings settings;
 
     private long lastRangedAttackTick = 0;
     private long lastMeleeAttackTick = 0;
@@ -61,17 +61,18 @@ public class DragonBossController extends BossController {
         switch (mode) {
             case FIRST_SPAWN -> {
                 playSpawnEffects();
-                plugin.getLogManager().log(String.format("Un boss est apparu sur %s (Vie: %.1f/%.1f).", islandName, boss.getHealth(), maxHealth));
+                plugin.getLogManager().log(journal("dragon-spawned", islandName));
             }
             case WOKEN_FROM_DORMANT ->
-                plugin.getLogManager().log(String.format("Un boss dormant a été réveillé sur %s (Vie: %.1f/%.1f).", islandName, boss.getHealth(), maxHealth));
+                plugin.getLogManager().log(journal("dragon-woken", islandName));
             case RESTORED ->
-                plugin.getLogManager().log(String.format("Un boss a été restauré sur %s (Vie: %.1f/%.1f).", islandName, boss.getHealth(), maxHealth));
+                plugin.getLogManager().log(journal("dragon-restored", islandName));
         }
     }
 
     @Override
     protected void onTick() {
+        settings = plugin.getConfigManager().dragon();
         if (target != null) {
             updateAttackingMovement();
             updateAmbientParticles();
@@ -156,9 +157,9 @@ public class DragonBossController extends BossController {
     @Override
     protected String barTitle() {
         return settings.barTitle()
-            .replace("{name}", settings.name())
-            .replace("{current_health}", String.valueOf((int) Math.round(boss.getHealth())))
-            .replace("{max_health}", String.valueOf((int) Math.round(maxHealth)));
+            .replace("%name%", settings.name())
+            .replace("%current_health%", String.valueOf((int) Math.round(boss.getHealth())))
+            .replace("%max_health%", String.valueOf((int) Math.round(maxHealth)));
     }
 
     @Override

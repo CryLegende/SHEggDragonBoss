@@ -57,7 +57,7 @@ public class CreakingBossController extends BossController implements HeartOwner
     /** Flèches de la boussole des cœurs, de « droit devant » dans le sens des aiguilles d'une montre. */
     private static final String[] ARROWS = {"↑", "↗", "→", "↘", "↓", "↙", "←", "↖"};
 
-    private final CreakingSettings settings;
+    private CreakingSettings settings;
     private final HeartManager heartManager;
     private final Creaking creaking;
 
@@ -146,15 +146,13 @@ public class CreakingBossController extends BossController implements HeartOwner
                 Location at = boss.getLocation();
                 settings.spawnFx().spawn(at.clone().add(0, boss.getHeight() / 2, 0));
                 settings.spawnSound().play(at);
-                plugin.getLogManager().log(String.format("Un boss Creaking est apparu sur %s (Vie: %.1f/%.1f).", islandName, boss.getHealth(), maxHealth));
-                tellViewers(format(settings.messages().spawnHint()));
+                plugin.getLogManager().log(journal("creaking-spawned", islandName));
+                tellViewers(format(settings.texts().spawnHint()));
             }
             case WOKEN_FROM_DORMANT ->
-                plugin.getLogManager().log(String.format("Un boss Creaking dormant a été réveillé sur %s (Vie: %.1f/%.1f, phase %d/%d, %d cœur(s) à détruire).",
-                    islandName, boss.getHealth(), maxHealth, phasesStarted, settings.phases().size(), heartsLeft));
+                plugin.getLogManager().log(phaseJournal("creaking-woken", islandName));
             case RESTORED ->
-                plugin.getLogManager().log(String.format("Un boss Creaking a été restauré sur %s après un redémarrage (phase %d/%d, %d cœur(s) à détruire).",
-                    islandName, phasesStarted, settings.phases().size(), heartsLeft));
+                plugin.getLogManager().log(phaseJournal("creaking-restored", islandName));
         }
         // Boss repris en pleine phase d'invulnérabilité : ses cœurs avaient été retirés du monde, on les repose
         if (heartsToPlace > 0) tryPlaceHearts();
@@ -181,6 +179,8 @@ public class CreakingBossController extends BossController implements HeartOwner
 
     @Override
     protected void onTick() {
+        // Réglages relus à chaud (/sheggdragonboss reload) : un boss en cours applique les nouveaux réglages au tick suivant
+        settings = plugin.getConfigManager().creaking();
         checkPhaseTrigger();
         tickBlackout();
         if (tickCounter % settings.checkIntervalTicks() == 0) {
@@ -253,9 +253,9 @@ public class CreakingBossController extends BossController implements HeartOwner
         for (Player victim : victims) {
             // Joué pour chaque joueur : le son doit s'entendre aussi loin que le rayon du Noir
             cfg.telegraphSound().playFor(victim);
-            PlayerText.title(victim, format(settings.messages().blackoutTitle()), format(settings.messages().blackoutSubtitle()));
+            PlayerText.title(victim, format(settings.texts().blackoutTitle()), format(settings.texts().blackoutSubtitle()));
         }
-        plugin.getLogManager().log(String.format("Boss Creaking sur %s : le Noir tombe sur %d joueur(s).", islandLabel(), victims.size()));
+        plugin.getLogManager().log(journal("creaking-blackout", islandLabel(), "players", String.valueOf(victims.size())));
     }
 
     private void startWindow(CreakingSettings.Blackout cfg) {
@@ -391,7 +391,7 @@ public class CreakingBossController extends BossController implements HeartOwner
         Location origin = boss.getLocation();
         if (victim.getLocation().distanceSquared(origin) > cfg.strikeReach() * cfg.strikeReach()) {
             cfg.dodgeSound().playFor(victim);
-            PlayerText.actionBar(victim, settings.messages().dodge());
+            PlayerText.actionBar(victim, settings.texts().dodge());
             return;
         }
         cfg.strikeSound().play(origin);
@@ -488,12 +488,11 @@ public class CreakingBossController extends BossController implements HeartOwner
             nextBlackoutTick = Math.max(nextBlackoutTick, tickCounter + settings.blackout().afterPhaseDelayTicks());
         }
 
-        plugin.getLogManager().log(String.format("Boss Creaking sur %s : phase %d/%d, %d cœur(s) à détruire (Vie: %.1f/%.1f).",
-            islandLabel(), phasesStarted, settings.phases().size(), heartsLeft, boss.getHealth(), maxHealth));
+        plugin.getLogManager().log(phaseJournal("creaking-phase-start", islandLabel()));
         settings.shieldStartSound().play(boss.getLocation());
-        tellViewers(format(settings.messages().shieldStart()));
+        tellViewers(format(settings.texts().shieldStart()));
         for (Player viewer : viewers()) {
-            PlayerText.title(viewer, format(settings.messages().shieldTitle()), format(settings.messages().shieldSubtitle()));
+            PlayerText.title(viewer, format(settings.texts().shieldTitle()), format(settings.texts().shieldSubtitle()));
         }
         updateBossBar();
     }
@@ -533,7 +532,7 @@ public class CreakingBossController extends BossController implements HeartOwner
         if (heartsLeft > 0) heartsLeft--;
         persistState();
         if (heartsLeft > 0) {
-            tellViewers(format(settings.messages().heartDestroyed()).replace("{player}", player.getName()));
+            tellViewers(format(settings.texts().heartDestroyed()).replace("%player%", player.getName()));
             updateBossBar();
         } else {
             endPhase();
@@ -544,19 +543,24 @@ public class CreakingBossController extends BossController implements HeartOwner
         heartsLeft = 0;
         heartsToPlace = 0;
         persistState();
-        plugin.getLogManager().log(String.format("Boss Creaking sur %s : phase %d/%d terminée, le boss est de nouveau vulnérable (Vie: %.1f/%.1f).",
-            islandLabel(), phasesStarted, settings.phases().size(), boss.getHealth(), maxHealth));
+        plugin.getLogManager().log(phaseJournal("creaking-phase-end", islandLabel()));
         settings.shieldEndSound().play(boss.getLocation());
-        tellViewers(format(settings.messages().shieldEnd()));
+        tellViewers(format(settings.texts().shieldEnd()));
         updateBossBar();
     }
 
     private String format(String message) {
         return message
-            .replace("{hearts}", String.valueOf(heartsLeft))
-            .replace("{phase}", String.valueOf(phasesStarted))
-            .replace("{phases}", String.valueOf(settings.phases().size()))
-            .replace("{name}", settings.name());
+            .replace("%hearts%", String.valueOf(heartsLeft))
+            .replace("%phase%", String.valueOf(phasesStarted))
+            .replace("%phases%", String.valueOf(settings.phases().size()))
+            .replace("%name%", settings.name());
+    }
+
+    /** Ligne du journal avec la phase en cours : %phase%, %phases% et %hearts%. */
+    private String phaseJournal(String key, String island) {
+        return journal(key, island, "phase", String.valueOf(phasesStarted), "phases", String.valueOf(settings.phases().size()),
+            "hearts", String.valueOf(heartsLeft));
     }
 
     /** Écrit la phase et les cœurs restants sur l'entité : un redémarrage reprend le combat là où il en était. */
@@ -606,8 +610,8 @@ public class CreakingBossController extends BossController implements HeartOwner
             double relative = ((targetYaw - from.getYaw()) % 360.0 + 540.0) % 360.0 - 180.0;
             String arrow = ARROWS[Math.floorMod((int) Math.round(relative / 45.0), 8)];
             PlayerText.actionBar(viewer, format(cfg.guideActionbar())
-                .replace("{distance}", String.valueOf((int) Math.round(Math.sqrt(best))))
-                .replace("{arrow}", arrow));
+                .replace("%distance%", String.valueOf((int) Math.round(Math.sqrt(best))))
+                .replace("%arrow%", arrow));
         }
     }
 
@@ -740,8 +744,8 @@ public class CreakingBossController extends BossController implements HeartOwner
     protected String barTitle() {
         String template = isShielded() ? settings.bar().shieldTitle() : settings.bar().title();
         return format(template)
-            .replace("{current_health}", String.valueOf((int) Math.round(boss.getHealth())))
-            .replace("{max_health}", String.valueOf((int) Math.round(maxHealth)));
+            .replace("%current_health%", String.valueOf((int) Math.round(boss.getHealth())))
+            .replace("%max_health%", String.valueOf((int) Math.round(maxHealth)));
     }
 
     @Override

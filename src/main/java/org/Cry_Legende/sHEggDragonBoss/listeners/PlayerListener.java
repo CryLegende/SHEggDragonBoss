@@ -67,8 +67,6 @@ public class PlayerListener implements Listener {
         if (clickedBlock == null) return;
         RitualSettings ritual = configManager.ritualForBlock(clickedBlock.getType());
         if (ritual == null) return;
-        // Un cœur de combat est un bloc du même type que le cœur du rituel du Creaking, mais n'est pas un autel
-        if (heartManager.isHeart(clickedBlock)) return;
         Player player = event.getPlayer();
         if (player.getInventory().getItemInMainHand().getType() != ritual.item()) return;
 
@@ -96,8 +94,6 @@ public class PlayerListener implements Listener {
         Block block = event.getBlock();
         RitualSettings ritual = configManager.ritualForBlock(block.getType());
         if (ritual == null) return;
-        // Les cœurs de combat sont protégés par HeartListener, pas par le rituel
-        if (heartManager.isHeart(block)) return;
         if (!bossManager.handleRitualBreak(block.getLocation())) {
             event.setCancelled(true);
             send(event.getPlayer(), ritual.lockedMessage());
@@ -145,13 +141,13 @@ public class PlayerListener implements Listener {
         Player killer = entity.getKiller();
 
         Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(loc);
-        String islandName = (island != null && island.getOwner() != null) ? "l'île de " + island.getOwner().getName() : "une île inconnue";
-        String killerName = killer != null ? killer.getName() : "Cause inconnue";
-        if (type == BossType.CREAKING) {
-            plugin.getLogManager().log(String.format("Le boss Creaking sur %s a été tué par %s.", islandName, killerName));
-        } else {
-            plugin.getLogManager().log(String.format("Le boss sur %s a été tué par %s.", islandName, killerName));
-        }
+        var messages = plugin.getMessages();
+        String islandName = (island != null && island.getOwner() != null)
+            ? messages.journal("island-of", "owner", island.getOwner().getName())
+            : messages.journal("island-unknown");
+        String killerName = killer != null ? killer.getName() : messages.journal("killer-unknown");
+        plugin.getLogManager().log(messages.journal(type == BossType.CREAKING ? "creaking-killed" : "dragon-killed",
+            "island", islandName, "killer", killerName));
 
         settings.deathSound().play(loc);
         event.getDrops().clear();

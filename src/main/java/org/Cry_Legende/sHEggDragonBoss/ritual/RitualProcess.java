@@ -168,10 +168,10 @@ public class RitualProcess {
     private List<String> formatHologramText(List<String> lines, String... replacements) {
         return lines.stream().map(line -> {
             String formatted = line
-                .replace("{current}", String.valueOf(currentItems))
-                .replace("{required}", String.valueOf(ritual.requiredAmount()));
+                .replace("%current%", String.valueOf(currentItems))
+                .replace("%required%", String.valueOf(ritual.requiredAmount()));
             if (replacements.length > 0) {
-                formatted = formatted.replace("{time}", replacements[0]);
+                formatted = formatted.replace("%time%", replacements[0]);
             }
             return formatted;
         }).collect(Collectors.toList());

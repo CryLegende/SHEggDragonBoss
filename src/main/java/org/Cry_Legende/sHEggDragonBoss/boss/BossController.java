@@ -222,8 +222,19 @@ public abstract class BossController extends BukkitRunnable {
         return new BossDataManager.BossData(island.getUniqueId(), type(), lastKnownLocation, lastKnownHealth, maxHealth, savedPhase(), savedHearts());
     }
 
+    /** Ligne du journal : %island%, %health% et %max% sont fournis ; {@code extra} = nom, valeur, nom, valeur... */
+    protected String journal(String key, String island, String... extra) {
+        String[] base = {"island", island, "health", String.format("%.1f", boss.getHealth()), "max", String.format("%.1f", maxHealth)};
+        String[] all = new String[base.length + extra.length];
+        System.arraycopy(base, 0, all, 0, base.length);
+        System.arraycopy(extra, 0, all, base.length, extra.length);
+        return plugin.getMessages().journal(key, all);
+    }
+
     protected String islandLabel() {
-        return (island != null && island.getOwner() != null) ? "l'île de " + island.getOwner().getName() : "une île inconnue";
+        return (island != null && island.getOwner() != null)
+            ? plugin.getMessages().journal("island-of", "owner", island.getOwner().getName())
+            : plugin.getMessages().journal("island-unknown");
     }
 
     // SSB2 2026 : getCenter prend une Dimension et non plus un World.Environment

@@ -25,7 +25,7 @@ public record RitualSettings(
     String lockedMessage
 ) {
 
-    /** Hologramme au-dessus du bloc ; les textes acceptent {current}, {required} et, pour le compte à rebours, {time}. */
+    /** Hologramme au-dessus du bloc ; les textes (messages.yml) acceptent %current%, %required% et, pour le compte à rebours, %time%. */
     public record Hologram(
         String namePrefix,
         List<String> progress,

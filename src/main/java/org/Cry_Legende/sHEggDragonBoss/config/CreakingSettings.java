@@ -44,7 +44,7 @@ public record CreakingSettings(
     Fx shieldAuraFx,
     int shieldAuraIntervalTicks,
     Rewards rewards,
-    Messages messages
+    Texts texts
 ) implements BossSettings {
 
     /** Barre de boss : apparence normale puis apparence pendant une phase d'invulnérabilité. */
@@ -81,7 +81,9 @@ public record CreakingSettings(
         double markerHeight,
         String guideActionbar,
         int guideIntervalTicks,
-        double guideRange
+        double guideRange,
+        boolean glow,
+        int glowColor
     ) {
     }
 
@@ -149,10 +151,9 @@ public record CreakingSettings(
     }
 
     /**
-     * Messages du combat ; {hearts} = cœurs restants, {phase} / {phases} = phase en cours / nombre de phases,
-     * {player} = le joueur qui a brisé le cœur. Un message vide n'est pas envoyé.
+     * Textes du combat, lus dans messages.yml (bosses.creaking.*). Un message vide n'est pas envoyé.
      */
-    public record Messages(
+    public record Texts(
         String spawnHint,
         String shieldStart,
         String shieldTitle,
