@@ -270,6 +270,7 @@ bosses:
   # le regarde (mécanique du jeu, pas du plugin). Le plugin joue sur ce regard :
   #   - le Noir : il aveugle les joueurs proches ; un joueur aveuglé ne le fige plus, alors le boss se téléporte
   #     derrière lui et le frappe (la frappe est annoncée par un craquement, on l'esquive en s'éloignant) ;
+  #   - le Sursaut : frappé sur place sans répit, il finit par se téléporter derrière celui qui le frappe le plus et le frapper ;
   #   - quand ses PV passent sous un seuil, il devient invulnérable et des cœurs apparaissent autour de lui : tant
   #     qu'il en reste, il ne perd aucun PV. On les brise en les FRAPPANT (clic gauche répété), pas en les minant ;
   #   - ses dégâts « réels » (un pourcentage des PV max du joueur) traversent armure, protections et absorption,
@@ -297,8 +298,8 @@ bosses:
     # À chaque frappe de mêlée, part des PV MAX du joueur retirée en plus, directement : ni l'armure, ni les
     # enchantements de protection, ni l'absorption ne l'arrêtent (0 : désactivé). Voir aussi les attaques ci-dessous.
     melee-true-damage-percent: 4.0
-    # Vitesse de déplacement (attribut vanilla ; le Creaking vanilla marche à 0.4).
-    movement-speed: 0.4
+    # Vitesse de déplacement (attribut vanilla ; le Creaking vanilla marche à 0.4). Relue à chaud.
+    movement-speed: 0.6
     # Armure (0 à 30) et robustesse (0 à 20) : réduisent les dégâts reçus comme pour un joueur.
     armor: 8.0
     armor-toughness: 2.0
@@ -334,6 +335,9 @@ bosses:
     arena:
       max-depth-below-center: 30.0
       recenter-offset-y: 1.0
+      # Un joueur dont les blocs sous les pieds sont vides sur cette hauteur est « en l'air » (vol, élytres, grand saut) :
+      # le boss le rejoint à sa hauteur, sans gravité, le temps de sa frappe (Noir et Sursaut), puis redescend au sol.
+      airborne-clearance: 3
 
     # --- PHASES D'INVULNÉRABILITÉ ---
     # Quand les PV passent sous health-percent % du maximum, le boss devient invulnérable et `hearts` cœurs
@@ -504,6 +508,8 @@ bosses:
         strike-true-damage-percent: 15.0
         # Force du recul de la frappe.
         strike-knockback: 0.6
+        # true : le nom du boss disparaît pendant l'aveuglement (même aveugle, on le voit à travers le noir).
+        hide-name: true
         # Effets appliqués pendant le Noir. type : nom d'effet, amplifier : niveau - 1. La durée est celle de l'aveuglement.
         effects:
           - type: "blindness"
@@ -545,6 +551,41 @@ bosses:
           sound: "ENTITY_PLAYER_ATTACK_NODAMAGE"
           volume: 1.0
           pitch: 0.8
+
+      # Sursaut : le regard fige le boss, mais frappé sur place sans répit il finit par se retourner contre celui qui le frappe
+      # le plus. Il se téléporte derrière lui (à sa hauteur s'il vole), puis le frappe `strike-delay-ticks` plus tard : même
+      # frappe esquivable que le Noir, avec les mêmes sons et particules (blackout.*). Rien ne compte pendant le Noir ni
+      # pendant une phase d'invulnérabilité.
+      sursaut:
+        enabled: true
+        # Temps, en ticks, que le boss doit passer sur place en recevant des coups. Le compteur redescend quand les coups cessent.
+        pinned-ticks: 80
+        # Un coup reçu compte comme « en train d'être frappé » pendant ce nombre de ticks.
+        hit-window-ticks: 30
+        # Le boss est « sur place » tant qu'il reste à moins de cette distance, en blocs, de l'endroit où il s'est arrêté.
+        still-distance: 3.0
+        # Délai entre l'avertissement (craquement, barre d'action de la cible) et la téléportation.
+        warning-ticks: 12
+        # Délai minimal avant le Sursaut suivant.
+        cooldown-ticks: 60
+        # Rayon, en blocs, autour du boss pour choisir la cible (le joueur qui l'a le plus frappé, sinon le plus proche).
+        radius: 30.0
+        # Distance, en blocs, entre le boss et sa cible à l'arrivée.
+        blink-distance: 2.0
+        # Délai entre l'arrivée du boss et sa frappe : le temps de s'écarter.
+        strike-delay-ticks: 14
+        # Portée de la frappe, en blocs. Au-delà, la cible l'a esquivée.
+        strike-reach: 3.2
+        # Dégâts normaux (arrêtés par l'armure) et part des PV max de la cible retirée en plus, directement.
+        strike-damage: 12.0
+        strike-true-damage-percent: 8.0
+        # Force du recul de la frappe.
+        strike-knockback: 0.8
+        # Entendu par la cible et autour du boss pendant l'avertissement.
+        warning-sound:
+          sound: "ENTITY_CREAKING_ACTIVATE"
+          volume: 2.0
+          pitch: 0.7
 
     # --- SONS ET EFFETS ---
     # Le Creaking garde ses sons vanilla ; ceux-ci s'y ajoutent. Un nom vide ("") désactive un son.

@@ -105,13 +105,13 @@ bosses:
   # Placeholders du combat : %hearts% cœurs restants, %phase% phase en cours, %phases% nombre de phases,
   # %player% joueur qui vient de briser un cœur (seulement dans heart-destroyed), %name% nom du boss.
   creaking:
-    name: "&2Creaking"
+    name: "&#FF7F11Creaking"
     # Barre de boss normale, puis pendant une phase d'invulnérabilité (couleur et style : config.yml).
     # Placeholders en plus : %current_health%, %max_health%.
     bossbar-title: "%name% &7- &c&l%current_health% &4/ &c&l%max_health% &4❤"
     bossbar-shield-title: "%name% &7- &6&lINVULNÉRABLE &7- &eFrappez les cœurs &7: &c&l%hearts%"
     # Le boss apparaît : envoyé une fois aux joueurs de l'île, il explique la règle du regard.
-    spawn-hint: "&7&l« &2&lSH &8&l» &7Le Creaking &2se fige &7tant qu'on le &eregarde&7. Quand le &8noir &7tombe, plus rien ne l'arrête : écoutez ses &8craquements&7."
+    spawn-hint: "&7&l« &#FF7F11&lSH &8&l» &7Le Creaking &#FF7F11se fige &7tant qu'on le &eregarde&7. Quand le &8noir &7tombe, plus rien ne l'arrête : écoutez ses &8craquements&7. Frappé sans répit, il finit par se &cretourner &7contre vous."
     # Le boss passe sous un seuil de PV : il devient invulnérable et des cœurs apparaissent autour de lui.
     shield-start: "&7&l« &6&lSH &8&l» &7Le Creaking devient &6invulnérable &7! &eFrappez &7les &6%hearts% cœurs &7qui l'entourent : &eclic gauche répété&7, un cœur ne se mine pas."
     # Titre et sous-titre affichés à l'écran au début d'une phase. Vide : aucun.
@@ -134,6 +134,9 @@ bosses:
     blackout-subtitle: "&7Il ne s'arrête plus. &eÉcoutez&7 et &eécartez-vous&7."
     # Barre d'action du joueur qui esquive la frappe du boss.
     dodge: "&a&lEsquivé !"
+    # Barre d'action du joueur que le boss vise après avoir été frappé trop longtemps sur place (Sursaut). Le boss arrive
+    # derrière lui dans une fraction de seconde : le temps de s'écarter.
+    sursaut-warning: "&c&l⚠ %name% &7se retourne contre &evous &8» &eécartez-vous&7 !"
 
 # ----------------------------------------------------------------#
 #                              OBJETS                             #
@@ -147,7 +150,7 @@ items:
       - "&8Rituel du Creaking"
       - "&7Posez-le sur votre île, puis faites un"
       - "&7clic droit avec &a%required% briques de résine &7pour"
-      - "&7réveiller le boss &2Creaking&7. Un seul par île."
+      - "&7réveiller le boss &#FF7F11Creaking&7. Un seul par île."
       - ""
       - "&8Se revend en boutique (Divers)."
   resin-brick:
@@ -155,7 +158,7 @@ items:
       - "&8Rituel du Creaking"
       - "&7Donnez-en &a%required% &7au cœur du Creaking"
       - "&7posé sur votre île (clic droit) pour"
-      - "&7réveiller le boss &2Creaking&7."
+      - "&7réveiller le boss &#FF7F11Creaking&7."
       - ""
       - "&8Se revend en boutique (Divers)."
 
@@ -164,7 +167,7 @@ items:
 # ----------------------------------------------------------------#
 # Une ligne par évènement, horodatée par le plugin. Pas de codes couleur.
 # Placeholders : %island% (voir island-of), %health% et %max% PV, %phase% %phases% %hearts% pour le Creaking,
-# %killer% le tueur, %players% nombre de joueurs touchés par le Noir.
+# %killer% le tueur, %players% nombre de joueurs touchés par le Noir, %player% et %seconds% pour le Sursaut.
 journal:
   island-of: "l'île de %owner%"
   island-unknown: "une île inconnue"
@@ -178,5 +181,6 @@ journal:
   creaking-restored: "Un boss Creaking a été restauré sur %island% après un redémarrage (phase %phase%/%phases%, %hearts% cœur(s) à détruire)."
   creaking-killed: "Le boss Creaking sur %island% a été tué par %killer%."
   creaking-blackout: "Boss Creaking sur %island% : le Noir tombe sur %players% joueur(s)."
+  creaking-sursaut: "Boss Creaking sur %island% : frappé sur place depuis %seconds% s, il se retourne contre %player%."
   creaking-phase-start: "Boss Creaking sur %island% : phase %phase%/%phases%, %hearts% cœur(s) à détruire (Vie: %health%/%max%)."
   creaking-phase-end: "Boss Creaking sur %island% : phase %phase%/%phases% terminée, le boss est de nouveau vulnérable (Vie: %health%/%max%)."

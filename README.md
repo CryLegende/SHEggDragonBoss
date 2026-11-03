@@ -22,7 +22,7 @@ Chaque boss se lance par un rituel : un clic droit sur un bloc avec un objet (Sh
 | Objet requis | 15 `ECHO_SHARD` | 10 `RESIN_BRICK` |
 | Compte à rebours | 10 s | 10 s |
 | Boss | Phantom « Jeune Ender Dragon », sans IA, qui poursuit les joueurs de l'île | Creaking à l'IA vanilla (il se fige quand on le regarde) |
-| Combat | Frappe de près et boules de feu de loin | Frappe vanilla, onde de choc, résine collante et le Noir (cécité, téléportations) |
+| Combat | Frappe de près et boules de feu de loin | Frappe vanilla, onde de choc, résine collante, le Noir (cécité, téléportations) et le Sursaut (se retourne contre qui le frappe sur place) |
 | Particularité | | Invulnérable par phases (66 % puis 33 % des PV) tant qu'il reste des cœurs à détruire à la main autour de lui |
 | Récompenses | 1 membrane de phantom, 15 000 XP, commande `rc dragonegg-rewards {player}` | 20 000 XP, commande `rc creaking-rewards {player}` |
 
@@ -39,6 +39,9 @@ Règles communes :
 Le Creaking vanilla se fige tant qu'un joueur le regarde ; le combat joue sur cette règle, face à des joueurs en équipement complet.
 
 - **Le Noir.** Régulièrement, le boss annonce le noir (titre, battement de cœur), puis aveugle (cécité et obscurité) les joueurs proches pendant quelques secondes. Un joueur aveuglé ne le fige plus : le boss se téléporte à deux blocs derrière lui, un craquement positionnel est le seul indice, et il frappe une fraction de seconde plus tard. On esquive en s'éloignant au-delà de la portée de la frappe, ou en retirant l'aveuglement (lait) : un joueur qui voit n'est plus pris pour cible. Le délai raccourcit à chaque phase.
+- **Le nom disparaît pendant le Noir.** Même aveuglé, on verrait le nom du boss à travers le noir : il est retiré le temps de l'aveuglement et revient ensuite (`hide-name`).
+- **Le Sursaut.** Le regard fige le boss, mais un boss frappé sur place sans répit finit par réagir : quand il est resté immobile `pinned-ticks` ticks en recevant des coups, il se téléporte derrière celui qui l'a le plus frappé et le frappe une fraction de seconde plus tard, comme au Noir (même esquive, avertissement dans la barre d'action de la cible). Rien ne compte pendant le Noir ni pendant une phase.
+- **Joueurs en vol.** Une proie dont les `airborne-clearance` blocs sous les pieds sont vides (vol, élytres, grand saut) n'échappe ni au Noir ni au Sursaut : le boss la rejoint à sa hauteur, sans gravité, le temps de sa frappe, puis redescend au sol.
 - **Dégâts réels.** Armure, protections et cœurs d'absorption arrêtent presque tout coup normal d'un équipement complet. La frappe du Noir, l'onde de choc et la mêlée retirent donc en plus une part des PV max du joueur, directement. Un coup mortel passe par un vrai coup (totem d'immortalité, règles de l'île).
 - **Plafond par coup.** Aucun coup ne retire plus de `max-hit-percent` % des PV max du boss : c'est ce plafond qui fixe la durée minimale du combat, quelle que soit la force du coup.
 - **Phases et cœurs.** Sous un seuil de PV, le boss devient invulnérable, la barre de boss change de titre et de couleur et affiche les cœurs restants. Des blocs `CREAKING_HEART` non naturels apparaissent sur des blocs d'air de l'île, à quelques blocs de lui.

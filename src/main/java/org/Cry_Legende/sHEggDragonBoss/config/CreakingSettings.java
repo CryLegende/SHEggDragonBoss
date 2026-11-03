@@ -34,6 +34,7 @@ public record CreakingSettings(
     Shockwave shockwave,
     Resin resin,
     Blackout blackout,
+    Sursaut sursaut,
     Sfx spawnSound,
     Fx spawnFx,
     Sfx deathSound,
@@ -51,8 +52,11 @@ public record CreakingSettings(
     public record Bar(String title, BarColor color, BarStyle style, String shieldTitle, BarColor shieldColor, BarStyle shieldStyle) {
     }
 
-    /** Limites de l'arène : sous {@code maxDepthBelowCenter} blocs sous le centre de l'île, le boss est ramené au centre. */
-    public record Arena(double maxDepthBelowCenter, double recenterOffsetY) {
+    /**
+     * Limites de l'arène : sous {@code maxDepthBelowCenter} blocs sous le centre de l'île, le boss est ramené au centre.
+     * Un joueur dont les {@code airborneClearance} blocs sous les pieds sont vides (vol, saut en hauteur, élytres) est « en l'air ».
+     */
+    public record Arena(double maxDepthBelowCenter, double recenterOffsetY, int airborneClearance) {
     }
 
     /** Une phase d'invulnérabilité : déclenchée sous {@code healthPercent} % des PV, protégée par {@code hearts} cœurs. */
@@ -139,6 +143,7 @@ public record CreakingSettings(
         double strikeDamage,
         double strikeTruePercent,
         double strikeKnockback,
+        boolean hideName,
         List<BlindEffect> effects,
         Sfx telegraphSound,
         Fx telegraphFx,
@@ -147,6 +152,30 @@ public record CreakingSettings(
         Sfx strikeSound,
         Fx strikeFx,
         Sfx dodgeSound
+    ) {
+    }
+
+    /**
+     * Le Sursaut : le regard fige le Creaking, alors un boss frappé sans répit resterait sans réaction. Tant qu'il reste sur
+     * place en recevant des coups, un compteur monte ; quand il atteint {@code pinnedTicks}, le boss se téléporte derrière
+     * celui qui l'a le plus frappé (en l'air aussi, si le joueur vole) puis le frappe, comme au Noir (esquivable).
+     * Les sons et particules sont ceux du Noir.
+     */
+    public record Sursaut(
+        boolean enabled,
+        int pinnedTicks,
+        int hitWindowTicks,
+        double stillDistance,
+        int warningTicks,
+        int cooldownTicks,
+        double radius,
+        double blinkDistance,
+        int strikeDelayTicks,
+        double strikeReach,
+        double strikeDamage,
+        double strikeTruePercent,
+        double strikeKnockback,
+        Sfx warningSound
     ) {
     }
 
@@ -163,7 +192,8 @@ public record CreakingSettings(
         String shieldEnd,
         String blackoutTitle,
         String blackoutSubtitle,
-        String dodge
+        String dodge,
+        String sursautWarning
     ) {
     }
 }

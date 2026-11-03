@@ -220,7 +220,8 @@ public class ConfigManager {
 
         CreakingSettings.Arena arena = new CreakingSettings.Arena(
             in.decimal(p + "arena.max-depth-below-center", 0.0),
-            in.decimal(p + "arena.recenter-offset-y", -64.0, 64.0));
+            in.decimal(p + "arena.recenter-offset-y", -64.0, 64.0),
+            in.integer(p + "arena.airborne-clearance", 1));
 
         String h = p + "hearts.";
         CreakingSettings.Hearts hearts = new CreakingSettings.Hearts(
@@ -292,6 +293,7 @@ public class ConfigManager {
             in.decimal(bo + "strike-damage", 0.0),
             in.decimal(bo + "strike-true-damage-percent", 0.0, 100.0),
             in.decimal(bo + "strike-knockback", 0.0, 10.0),
+            in.bool(bo + "hide-name"),
             readBlindEffects(in, bo + "effects"),
             in.sfx(bo + "telegraph-sound"),
             in.fx(bo + "telegraph-particles", true),
@@ -300,6 +302,23 @@ public class ConfigManager {
             in.sfx(bo + "strike-sound"),
             in.fx(bo + "strike-particles", true),
             in.sfx(bo + "dodge-sound"));
+
+        String su = p + "attacks.sursaut.";
+        CreakingSettings.Sursaut sursaut = new CreakingSettings.Sursaut(
+            in.bool(su + "enabled"),
+            in.integer(su + "pinned-ticks", 5),
+            in.integer(su + "hit-window-ticks", 1),
+            in.decimal(su + "still-distance", 0.5, 32.0),
+            in.integer(su + "warning-ticks", 1),
+            in.integer(su + "cooldown-ticks", 0),
+            in.decimal(su + "radius", 0.5, 128.0),
+            in.decimal(su + "blink-distance", 1.0, 8.0),
+            in.integer(su + "strike-delay-ticks", 1),
+            in.decimal(su + "strike-reach", 1.0, 16.0),
+            in.decimal(su + "strike-damage", 0.0),
+            in.decimal(su + "strike-true-damage-percent", 0.0, 100.0),
+            in.decimal(su + "strike-knockback", 0.0, 10.0),
+            in.sfx(su + "warning-sound"));
 
         CreakingSettings.Texts texts = new CreakingSettings.Texts(
             m.text(t + "spawn-hint"),
@@ -311,7 +330,8 @@ public class ConfigManager {
             m.text(t + "shield-end"),
             m.text(t + "blackout-title"),
             m.text(t + "blackout-subtitle"),
-            m.text(t + "dodge"));
+            m.text(t + "dodge"),
+            m.text(t + "sursaut-warning"));
 
         return new CreakingSettings(
             m.text(t + "name"),
@@ -335,6 +355,7 @@ public class ConfigManager {
             shockwave,
             resin,
             blackout,
+            sursaut,
             in.sfx(p + "spawn-sound"),
             in.fx(p + "spawn-particles", true),
             in.sfx(p + "death-sound"),
