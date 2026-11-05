@@ -9,6 +9,17 @@
 #              tant qu'il reste des cœurs à détruire autour de lui.
 # Une île n'a jamais qu'un seul boss (n'importe lequel) ou rituel en cours à la fois.
 #
+# Commandes :
+#   /sheggdragonboss reload                                       Recharge config.yml et messages.yml.
+#   /sheggdragonboss give <joueur> <coeur|briques> (quantité)     Donne le cœur ou les briques du rituel du Creaking.
+#   Alias : /shboss.
+#
+# Permissions :
+#   sheggdragonboss.admin   Utiliser /sheggdragonboss (op par défaut).
+#   Le rituel lui-même demande le privilège d'île de la section island-permission.
+#
+# Le journal des boss est écrit dans le fichier boss de SHLogs. Ses lignes sont dans messages.yml, section journal.
+#
 # Organisation du fichier :
 #   rituals           : bloc, objet, quantité, compte à rebours, hologramme et animation de chaque rituel
 #   sounds            : sons de chaque rituel

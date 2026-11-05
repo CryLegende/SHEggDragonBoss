@@ -163,9 +163,9 @@ items:
       - "&8Se revend en boutique (Divers)."
 
 # ----------------------------------------------------------------#
-#                 JOURNAL DES BOSS (logs/boss-log-*.log)          #
+#                 JOURNAL DES BOSS (SHLogs, fichier boss)         #
 # ----------------------------------------------------------------#
-# Une ligne par évènement, horodatée par le plugin. Pas de codes couleur.
+# Une ligne par évènement, écrite dans le fichier boss de SHLogs (qui ajoute la date). Pas de codes couleur.
 # Placeholders : %island% (voir island-of), %health% et %max% PV, %phase% %phases% %hearts% pour le Creaking,
 # %killer% le tueur, %players% nombre de joueurs touchés par le Noir, %player% et %seconds% pour le Sursaut.
 journal:

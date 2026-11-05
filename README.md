@@ -53,6 +53,7 @@ Le Creaking vanilla se fige tant qu'un joueur le regarde ; le combat joue sur ce
 ## Dépendances
 
 - Obligatoires : `SuperiorSkyblock2`, `FancyHolograms`
+- Optionnelle : `SHLogs`
 
 ## Commandes
 
@@ -84,7 +85,9 @@ plugins/SHEggDragonBoss/
 └── <a href="src/main/resources/messages.yml">messages.yml</a>
 </pre>
 
-Données écrites par le plugin dans le même dossier : `hatching-data.yml` (rituels en cours), `dormant-bosses.yml` (boss endormis) et `logs/` (un journal par jour, dont les lignes sont dans `messages.yml`). Dans les deux premiers, un champ `type` (`dragon` ou `creaking`) est facultatif : son absence signifie `dragon`.
+Données écrites par le plugin dans le même dossier : `hatching-data.yml` (rituels en cours) et `dormant-bosses.yml` (boss endormis). Dans les deux, un champ `type` (`dragon` ou `creaking`) est facultatif : son absence signifie `dragon`.
+
+Le journal des boss est écrit dans le fichier `boss` du dossier `SHEggDragonBoss` de SHLogs (`plugins/SHLogs/`), avec les lignes de la section `journal` de `messages.yml`. Sans SHLogs, elles passent dans la console.
 
 ## Compilation
 
