@@ -6,6 +6,7 @@ import org.Cry_Legende.sHEggDragonBoss.config.BossSettings;
 import org.Cry_Legende.sHEggDragonBoss.config.CommonMessages;
 import org.Cry_Legende.sHEggDragonBoss.config.ConfigReader;
 import org.Cry_Legende.sHEggDragonBoss.config.CreakingSettings;
+import org.Cry_Legende.sHEggDragonBoss.config.DeathSettings;
 import org.Cry_Legende.sHEggDragonBoss.config.DragonSettings;
 import org.Cry_Legende.sHEggDragonBoss.config.DynamicStats;
 import org.Cry_Legende.sHEggDragonBoss.config.Fx;
@@ -163,28 +164,82 @@ public class ConfigManager {
 
     private DragonSettings readDragon(ConfigReader in, Messages m) {
         String p = "bosses.dragon.";
-        double stoppingDistance = in.decimal(p + "stopping-distance", 0.0);
         double meleeRange = in.decimal(p + "melee-range", 0.0);
+
+        String fl = p + "flight.";
+        DragonSettings.Flight flight = new DragonSettings.Flight(
+            in.decimal(fl + "orbit-radius", 1.0, 64.0),
+            in.decimal(fl + "orbit-height", -8.0, 32.0),
+            in.decimal(fl + "orbit-degrees-per-tick", 0.0, 45.0));
+
+        String ra = p + "ranged-attack.";
+        DragonSettings.RangedAttack ranged = new DragonSettings.RangedAttack(
+            in.bool(ra + "enabled"),
+            in.integer(ra + "cooldown-ticks", 1),
+            in.decimal(ra + "min-range-squared", 0.0),
+            in.decimal(ra + "max-range", 1.0, 128.0),
+            in.integer(ra + "fireballs", 1),
+            in.integer(ra + "fireballs-per-phase", 0),
+            in.sfx(ra + "sound"));
+
+        String dv = p + "dive.";
+        DragonSettings.Dive dive = new DragonSettings.Dive(
+            in.bool(dv + "enabled"),
+            in.integer(dv + "cooldown-ticks", 1),
+            in.decimal(dv + "range", 1.0, 128.0),
+            in.integer(dv + "warning-ticks", 2),
+            in.integer(dv + "lock-ticks", 0),
+            in.decimal(dv + "speed", 0.1, 8.0),
+            in.decimal(dv + "hit-radius", 0.5, 32.0),
+            in.decimal(dv + "damage", 0.0),
+            in.decimal(dv + "true-damage-percent", 0.0, 100.0),
+            in.decimal(dv + "knockback", 0.0, 10.0),
+            in.integer(dv + "stun-ticks", 0),
+            in.decimal(dv + "stun-damage-multiplier", 1.0, 10.0),
+            in.sfx(dv + "warning-sound"),
+            in.fx(dv + "warning-particles", false),
+            in.sfx(dv + "impact-sound"),
+            in.fx(dv + "impact-particles", true),
+            in.fx(dv + "stun-particles", true));
+
+        String rr = p + "roar.";
+        DragonSettings.Roar roar = new DragonSettings.Roar(
+            in.bool(rr + "enabled"),
+            in.integer(rr + "duration-ticks", 1),
+            in.decimal(rr + "radius", 0.5, 64.0),
+            in.decimal(rr + "damage", 0.0),
+            in.decimal(rr + "true-damage-percent", 0.0, 100.0),
+            in.decimal(rr + "knockback-horizontal", 0.0, 10.0),
+            in.decimal(rr + "knockback-vertical", 0.0, 10.0),
+            in.sfx(rr + "start-sound"),
+            in.sfx(rr + "blast-sound"),
+            in.fx(rr + "aura-particles", true),
+            in.fx(rr + "blast-particles", false));
+
         return new DragonSettings(
             in.livingEntityType(p + "entity-type"),
             m.text("bosses.dragon.name"),
             m.text("bosses.dragon.bossbar-title"),
+            m.text("bosses.dragon.bossbar-roar-title"),
             in.enumValue(p + "bossbar.color", BarColor.class),
             in.enumValue(p + "bossbar.style", BarStyle.class),
             in.decimal(p + "health", 1.0),
             dynamicStats(in, p),
             in.integer(p + "phantom-size", 0),
             in.decimal(p + "attack-damage", 0.0),
+            in.decimal(p + "melee-true-damage-percent", 0.0, 100.0),
             meleeRange * meleeRange, // stocké au carré pour l'optimisation
             in.integer(p + "attack-cooldown-ticks", 1),
-            in.decimal(p + "movement-speed-multiplier", 0.0),
-            stoppingDistance * stoppingDistance, // stocké au carré pour l'optimisation
+            in.decimal(p + "movement-speed-multiplier", 0.1, 50.0),
+            in.decimal(p + "max-hit-percent", 0.0, 100.0),
             in.damageCauses(p + "immune-damage-causes"),
-            new DragonSettings.RangedAttack(
-                in.bool(p + "ranged-attack.enabled"),
-                in.integer(p + "ranged-attack.cooldown-ticks", 1),
-                in.decimal(p + "ranged-attack.min-range-squared", 0.0),
-                in.sfx(p + "ranged-attack.sound")),
+            readPercentages(in, p + "phases"),
+            in.decimal(p + "phase-speedup", 0.1, 1.0),
+            in.decimal(p + "phase-speed-bonus", 0.0, 2.0),
+            flight,
+            ranged,
+            dive,
+            roar,
             new DragonSettings.SpawnExplosion(
                 in.bool(p + "spawn-explosion.enabled"),
                 (float) in.decimal(p + "spawn-explosion.power", 0.0, 100.0),
@@ -196,13 +251,61 @@ public class ConfigManager {
             in.integer(p + "ambient-sound.delay", 1),
             in.sfx(p + "death-sound"),
             in.sfx(p + "hurt-sound"),
+            in.sfx(p + "blocked-sound"),
             new DragonSettings.AmbientParticles(
                 in.bool(p + "particles.ambient.enabled"),
                 in.particle(p + "particles.ambient.particle"),
                 in.integer(p + "particles.ambient.count", 0),
                 in.decimal(p + "particles.ambient.speed", 0.0),
                 in.integer(p + "particles.ambient.interval-ticks", 1)),
-            rewards(in, p + "rewards."));
+            rewards(in, p + "rewards."),
+            readDeath(in, p),
+            new DragonSettings.Texts(
+                m.text("bosses.dragon.roar-title"),
+                m.text("bosses.dragon.roar-subtitle"),
+                m.text("bosses.dragon.roar-chat"),
+                m.text("bosses.dragon.dive-warning")));
+    }
+
+    /** Seuils de PV (en % du maximum, entre 0 et 100 exclus), du plus haut au plus bas. Une valeur invalide est ignorée. */
+    private List<Double> readPercentages(ConfigReader in, String path) {
+        List<Double> percents = new ArrayList<>();
+        for (Object entry : plugin.getConfig().getList(path, List.of())) {
+            if (entry instanceof Number number && number.doubleValue() > 0.0 && number.doubleValue() < 100.0) {
+                percents.add(number.doubleValue());
+            } else {
+                in.warn("Seuil '" + entry + "' de '" + path + "' ignoré : un nombre entre 0 et 100 exclus est attendu.");
+            }
+        }
+        percents.sort(Comparator.reverseOrder());
+        return List.copyOf(percents);
+    }
+
+    /** La mort en scène d'un boss : {@code <chemin>.death.*}. */
+    private DeathSettings readDeath(ConfigReader in, String p) {
+        String d = p + "death.";
+        Material debris = in.rawText(d + "debris").isEmpty() ? null : in.block(d + "debris");
+        return new DeathSettings(
+            in.bool(d + "enabled"),
+            in.integer(d + "duration-ticks", 1),
+            in.decimal(d + "shake", 0.0, 4.0),
+            in.decimal(d + "lift", -16.0, 16.0),
+            in.decimal(d + "spin-degrees", 0.0, 90.0),
+            debris,
+            in.integer(d + "debris-count", 0),
+            in.sfx(d + "start-sound"),
+            in.sfx(d + "pulse-sound"),
+            in.integer(d + "pulse-interval-ticks", 0),
+            in.decimal(d + "pulse-pitch-growth", 0.0, 2.0),
+            in.fx(d + "aura-particles", false),
+            in.fx(d + "burst-particles", true),
+            in.fx(d + "ring-particles", false),
+            in.fx(d + "pillar-particles", true),
+            in.decimal(d + "ring-radius", 0.0, 64.0),
+            in.decimal(d + "pillar-height", 0.0, 64.0),
+            in.sfx(d + "finale-sound"),
+            in.sfx(d + "finale-extra-sound"),
+            in.sfx(d + "victory-sound"));
     }
 
     // ------------------------------------------------------------------ boss n°2 : creaking
@@ -247,7 +350,8 @@ public class ConfigManager {
             in.integer(h + "guide.interval-ticks", 1),
             in.decimal(h + "guide.range", 1.0, 256.0),
             in.bool(h + "glow"),
-            in.rgb(h + "glow-color"));
+            in.rgb(h + "glow-color"),
+            in.decimal(h + "credit-percent", 0.0, 100.0));
         if (hearts.maxDistance() < hearts.minDistance()) {
             in.warn("'" + h + "max-distance' (" + hearts.maxDistance() + ") est inférieur à '" + h + "min-distance' (" + hearts.minDistance()
                 + ") : les cœurs ne pourront jamais être placés.");
@@ -280,13 +384,15 @@ public class ConfigManager {
         CreakingSettings.Blackout blackout = new CreakingSettings.Blackout(
             in.bool(bo + "enabled"),
             in.integer(bo + "cooldown-ticks", 1),
+            in.integer(bo + "cooldown-jitter-ticks", 0),
             in.decimal(bo + "phase-cooldown-factor", 0.1, 1.0),
             in.integer(bo + "after-phase-delay-ticks", 0),
             in.decimal(bo + "radius", 0.5, 128.0),
-            in.integer(bo + "telegraph-ticks", 1),
-            in.integer(bo + "duration-ticks", 20),
+            in.integer(bo + "duration-ticks", 2),
             in.integer(bo + "first-blink-delay-ticks", 1),
-            in.integer(bo + "blink-interval-ticks", 10),
+            in.integer(bo + "blink-interval-ticks", 1),
+            in.decimal(bo + "hits-per-player", 0.1, 10.0),
+            in.integer(bo + "max-hits", 1),
             in.decimal(bo + "blink-distance", 1.0, 8.0),
             in.integer(bo + "strike-delay-ticks", 1),
             in.decimal(bo + "strike-reach", 1.0, 16.0),
@@ -295,8 +401,6 @@ public class ConfigManager {
             in.decimal(bo + "strike-knockback", 0.0, 10.0),
             in.bool(bo + "hide-name"),
             readBlindEffects(in, bo + "effects"),
-            in.sfx(bo + "telegraph-sound"),
-            in.fx(bo + "telegraph-particles", true),
             in.sfx(bo + "blink-sound"),
             in.fx(bo + "blink-particles", true),
             in.sfx(bo + "strike-sound"),
@@ -328,8 +432,6 @@ public class ConfigManager {
             m.text(t + "heart-hint"),
             m.text(t + "heart-destroyed"),
             m.text(t + "shield-end"),
-            m.text(t + "blackout-title"),
-            m.text(t + "blackout-subtitle"),
             m.text(t + "dodge"),
             m.text(t + "sursaut-warning"));
 
@@ -351,6 +453,7 @@ public class ConfigManager {
             in.decimal(p + "max-hit-percent", 0.0, 100.0),
             arena,
             readPhases(in, p + "phases"),
+            in.decimal(p + "hearts-per-extra-player", 0.0, 10.0),
             hearts,
             shockwave,
             resin,
@@ -366,6 +469,7 @@ public class ConfigManager {
             in.fx(p + "shield-aura-particles", true),
             in.integer(p + "shield-aura-particles.interval-ticks", 1),
             rewards(in, p + "rewards."),
+            readDeath(in, p),
             texts);
     }
 
@@ -449,8 +553,13 @@ public class ConfigManager {
         }
         return new Rewards(
             in.integer(p + "xp-reward", 0),
-            List.copyOf(items),
-            List.copyOf(plugin.getConfig().getStringList(p + "commands")));
+            in.decimal(p + "min-contribution-percent", 0.0, 100.0),
+            in.integer(p + "rolls", 0),
+            List.copyOf(plugin.getConfig().getStringList(p + "guaranteed-commands")),
+            List.copyOf(plugin.getConfig().getStringList(p + "participant-commands")),
+            List.copyOf(plugin.getConfig().getStringList(p + "mvp-commands")),
+            List.copyOf(plugin.getConfig().getStringList(p + "commands")),
+            List.copyOf(items));
     }
 
     // ------------------------------------------------------------------ accès

@@ -8,14 +8,14 @@ import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.Cry_Legende.sHEggDragonBoss.boss.BossController;
 import org.Cry_Legende.sHEggDragonBoss.boss.BossType;
 import org.Cry_Legende.sHEggDragonBoss.boss.CreakingBossController;
+import org.Cry_Legende.sHEggDragonBoss.boss.DeathEffects;
 import org.Cry_Legende.sHEggDragonBoss.config.BossSettings;
-import org.Cry_Legende.sHEggDragonBoss.config.Rewards;
 import org.Cry_Legende.sHEggDragonBoss.config.RitualSettings;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.ConfigManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.HeartManager;
+import org.Cry_Legende.sHEggDragonBoss.managers.RewardManager;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
@@ -34,11 +34,12 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Rituels (clic droit sur le bloc, casse du bloc) et vie des boss (dégâts, mort, reprise après redémarrage).
@@ -100,20 +101,30 @@ public class PlayerListener implements Listener {
         }
     }
 
-    /** Dégâts reçus par un boss : causes ignorées, puis invulnérabilité de phase du Creaking. */
+    /**
+     * Dégâts reçus par un boss : causes ignorées, puis filtre du boss (phases, plafond par coup), puis coup fatal retenu pour
+     * que le boss meure en plusieurs temps. Le coup de grâce du plugin passe sans aucun filtre.
+     */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBossDamageFilter(EntityDamageEvent event) {
         Entity entity = event.getEntity();
         if (!entity.getPersistentDataContainer().has(SHEggDragonBoss.BOSS_KEY, PersistentDataType.BYTE)) return;
         BossType type = BossType.of(entity.getPersistentDataContainer());
         if (type == null) return;
+        BossController controller = bossManager.getController(entity.getUniqueId());
+        if (controller != null && controller.isFinishing()) return;
         BossSettings settings = configManager.bossSettings(type);
         if (settings.immuneCauses().contains(event.getCause())) {
             event.setCancelled(true);
             return;
         }
-        if (type == BossType.CREAKING && bossManager.getController(entity.getUniqueId()) instanceof CreakingBossController creaking
-            && creaking.absorbDamage(event)) {
+        if (controller == null) return;
+        // Pendant la mort le boss est intouchable (sauf /kill et le vide, que interceptLethal laisse passer)
+        if (controller.isDying()) {
+            if (controller.interceptLethal(event)) event.setCancelled(true);
+            return;
+        }
+        if (controller.absorbDamage(event) || controller.interceptLethal(event)) {
             event.setCancelled(true);
         }
     }
@@ -136,9 +147,17 @@ public class PlayerListener implements Listener {
         if (type == null) return;
         BossSettings settings = configManager.bossSettings(type);
 
+        // Le contrôleur sait qui a porté le coup fatal et ce que chacun a fait au boss : à lire avant qu'il ne soit retiré
+        BossController controller = bossManager.getController(entity.getUniqueId());
+        Player finisher = controller != null ? controller.deathKiller() : null;
+        Player killer = finisher != null ? finisher : entity.getKiller();
+        Map<UUID, Double> contributions = controller != null ? controller.contributions() : Map.of();
+        Collection<Player> audience = controller != null ? controller.audience() : List.of();
+        double maxHealth = controller != null ? controller.maxHealth() : entity.getHealth();
+        boolean stagedFinale = controller != null && controller.finaleDone();
+
         bossManager.handleBossDeath(entity);
         Location loc = entity.getLocation();
-        Player killer = entity.getKiller();
 
         Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(loc);
         var messages = plugin.getMessages();
@@ -149,65 +168,15 @@ public class PlayerListener implements Listener {
         plugin.getLogManager().log(messages.journal(type == BossType.CREAKING ? "creaking-killed" : "dragon-killed",
             "island", islandName, "killer", killerName));
 
+        // Mort sans la scène (un autre plugin a mis ses PV à 0, /kill...) : le final éclate quand même
+        if (!stagedFinale && settings.death().enabled()) {
+            DeathEffects.finale(plugin, settings.death(), loc.clone().add(0, entity.getHeight() / 2.0, 0), audience);
+        }
         settings.deathSound().play(loc);
         event.getDrops().clear();
         event.setDroppedExp(0);
 
-        Rewards rewards = settings.rewards();
-        if (killer != null && rewards.xp() > 0) {
-            killer.giveExp(rewards.xp());
-        }
-
-        for (Rewards.ItemReward reward : rewards.items()) {
-            ItemStack itemStack = new ItemStack(reward.material(), reward.amount());
-            if (reward.name() != null || !reward.lore().isEmpty()) {
-                ItemMeta meta = itemStack.getItemMeta();
-                if (meta != null) {
-                    if (reward.name() != null) meta.setDisplayName(reward.name());
-                    if (!reward.lore().isEmpty()) meta.setLore(reward.lore());
-                    itemStack.setItemMeta(meta);
-                }
-            }
-            loc.getWorld().dropItemNaturally(loc, itemStack);
-        }
-
-        executeDeathCommands(rewards.commands(), killer, island, loc);
-    }
-
-    private void executeDeathCommands(List<String> commands, Player killer, Island island, Location loc) {
-        if (commands.isEmpty()) return;
-
-        String islandDisplay = "";
-        if (island != null) {
-            if (island.getName() != null && !island.getName().isEmpty()) {
-                islandDisplay = island.getName();
-            } else if (island.getOwner() != null) {
-                islandDisplay = island.getOwner().getName();
-            }
-        }
-
-        for (String rawCommand : commands) {
-            if (rawCommand == null || rawCommand.trim().isEmpty()) continue;
-            if (killer == null && rawCommand.contains("{player}")) continue;
-
-            String command = rawCommand.trim();
-            if (command.startsWith("/")) command = command.substring(1);
-
-            command = command
-                .replace("{player}", killer != null ? killer.getName() : "")
-                .replace("{island}", islandDisplay)
-                .replace("{world}", loc.getWorld().getName())
-                .replace("{x}", String.valueOf(loc.getBlockX()))
-                .replace("{y}", String.valueOf(loc.getBlockY()))
-                .replace("{z}", String.valueOf(loc.getBlockZ()));
-            command = ChatColor.translateAlternateColorCodes('&', command);
-
-            try {
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
-            } catch (Exception e) {
-                plugin.getLogger().warning("Erreur lors de l'exécution de la commande de mort du boss '" + command + "' : " + e.getMessage());
-            }
-        }
+        RewardManager.distribute(plugin, type, settings, contributions, maxHealth, killer, island, loc, audience);
     }
 
     // Un boss sauvegardé avec son chunk n'a plus de contrôleur après un redémarrage ou un déchargement : on le reprend
@@ -241,6 +210,10 @@ public class PlayerListener implements Listener {
             return;
         BossType type = BossType.of(event.getEntity().getPersistentDataContainer());
         if (type == null) return;
+
+        // Les PV réellement retirés au boss sont comptés à celui qui les a infligés (récompenses des participants)
+        BossController controller = bossManager.getController(event.getEntity().getUniqueId());
+        if (controller != null && !controller.isDying()) controller.recordDamage(event);
 
         if (event instanceof EntityDamageByEntityEvent byEntityEvent) {
             if (byEntityEvent.getDamager() instanceof Player attacker) {

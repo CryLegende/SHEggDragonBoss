@@ -40,6 +40,8 @@ public final class SHEggDragonBoss extends JavaPlugin {
     public static NamespacedKey CREAKING_PHASE_KEY;
     /** Creaking : cœurs qu'il reste à détruire dans la phase en cours. */
     public static NamespacedKey CREAKING_HEARTS_KEY;
+    /** Dragon : nombre de phases (rugissements) déjà déclenchées. */
+    public static NamespacedKey DRAGON_PHASE_KEY;
     /**
      * PV max et PV du boss, réécrits chaque seconde. Purpur (purpur.yml, mobs.phantom.attributes.max_health) remet les PV max
      * du Phantom à 20 quand son chunk se recharge : sans cette copie, le dragon reprenait 20 PV et la perdait pour toujours.
@@ -75,6 +77,7 @@ public final class SHEggDragonBoss extends JavaPlugin {
         BOSS_TYPE_KEY = new NamespacedKey(this, "shegg_boss_type");
         CREAKING_PHASE_KEY = new NamespacedKey(this, "shegg_creaking_phase");
         CREAKING_HEARTS_KEY = new NamespacedKey(this, "shegg_creaking_hearts");
+        DRAGON_PHASE_KEY = new NamespacedKey(this, "shegg_dragon_phase");
         BOSS_MAX_HEALTH_KEY = new NamespacedKey(this, "shegg_boss_max_health");
         BOSS_HEALTH_KEY = new NamespacedKey(this, "shegg_boss_health");
 

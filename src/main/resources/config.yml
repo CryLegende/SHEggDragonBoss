@@ -4,10 +4,13 @@
 #
 # Le plugin gère deux boss. Chacun est lancé par un rituel : clic droit sur un bloc avec un objet,
 # puis compte à rebours, puis apparition du boss.
-#   dragon   : bloc DRAGON_EGG + éclats d'écho  -> Phantom « Jeune Ender Dragon » qui poursuit les joueurs de l'île.
+#   dragon   : bloc DRAGON_EGG + éclats d'écho  -> Phantom « Jeune Ender Dragon » qui tourne autour des joueurs de l'île,
+#              plonge sur eux et rugit à chaque seuil de PV.
 #   creaking : bloc CREAKING_HEART + briques de résine -> Creaking à l'IA vanilla, invulnérable par phases
 #              tant qu'il reste des cœurs à détruire autour de lui.
 # Une île n'a jamais qu'un seul boss (n'importe lequel) ou rituel en cours à la fois.
+# Les deux boss : ne visent jamais les joueurs invisibles (vanish), en créatif ou en spectateur ; meurent en plusieurs temps
+# (section death) ; récompensent tous les participants, pas seulement celui qui porte le coup fatal (section rewards).
 #
 # Commandes :
 #   /sheggdragonboss reload                                       Recharge config.yml et messages.yml.
@@ -170,46 +173,160 @@ sounds:
 # ----------------------------------------------------------------#
 bosses:
   # ---------------------------------------------------------------
-  # Boss n°1 : le « Jeune Ender Dragon » (Phantom sans IA, déplacé par le plugin vers le joueur le plus proche).
+  # Boss n°1 : le « Jeune Ender Dragon » (Phantom sans IA, déplacé par le plugin). Il tourne autour d'un joueur en lui crachant
+  # des boules de feu, plonge sur un joueur tiré au hasard, et rugit à chaque seuil de PV :
+  #   - plongeon : il se cabre au-dessus de sa proie, fixe l'endroit visé (un cercle de particules l'indique au sol), puis
+  #     fond dessus. L'impact blesse tout ce qui est autour ; il reste ensuite étourdi et encaisse plus de dégâts ;
+  #   - rugissement : à chaque seuil de `phases` il est invulnérable un instant, puis un souffle repousse tout le monde. Il est
+  #     ensuite plus rapide (phase-speed-bonus), attaque plus souvent (phase-speedup) et tire plus de boules de feu ;
+  #   - ses dégâts « réels » (un pourcentage des PV max du joueur) traversent l'armure, et aucun coup ne lui retire plus de
+  #     max-hit-percent % de ses PV : un équipement complet ne le fait pas tomber en quelques secondes.
+  # Il ne vise ni les joueurs invisibles (vanish), ni ceux en créatif ou en spectateur.
   # ---------------------------------------------------------------
   dragon:
     # Type de créature : une créature vivante invocable (PHANTOM).
     entity-type: "PHANTOM"
-    # Barre de boss vue par les membres de l'île (titre : messages.yml, bosses.dragon).
+    # Barre de boss vue par les membres de l'île (titre : messages.yml, bosses.dragon). Elle rougit à la deuxième phase.
     # color : PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE. style : SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20.
     bossbar:
       color: "PURPLE"
       style: "SOLID"
     # PV de base. Les PV réels ajoutent dynamic-stats (voir plus bas).
-    health: 200.0
+    health: 600.0
     # Taille du Phantom.
     phantom-size: 7
 
     # --- COMBAT ---
-    # Dégâts de la frappe de près, distance maximale de la frappe (en blocs) et délai entre deux frappes.
+    # Morsure (le joueur le plus proche, s'il est à melee-range blocs de sa gueule) : dégâts normaux (arrêtés par l'armure),
+    # part des PV max du joueur retirée en plus directement (0 : désactivé), délai entre deux morsures.
     attack-damage: 35.0
+    melee-true-damage-percent: 4.0
     melee-range: 4.0
     attack-cooldown-ticks: 40
-    # Vitesse de déplacement (1 = 0.1 bloc par tick) et distance d'arrêt près de la cible, en blocs.
-    movement-speed-multiplier: 2
-    stopping-distance: 2.5
+    # Vitesse de déplacement maximale (1 = 0.1 bloc par tick). Chaque phase l'augmente de phase-speed-bonus.
+    movement-speed-multiplier: 7
+    # Aucun coup ne retire plus de ce pourcentage des PV max du boss (0 : pas de plafond). 1.2 % = au moins 84 coups,
+    # quelle que soit la force du coup.
+    max-hit-percent: 1.2
     # Causes de dégâts ignorées par le boss. Noms de EntityDamageEvent.DamageCause.
     immune-damage-causes:
       - SUFFOCATION
       - ENTITY_EXPLOSION
       - BLOCK_EXPLOSION
+    # Seuils de PV (en % du maximum) où il rugit. Chaque seuil ne se déclenche qu'une fois. Pour n'avoir aucune phase : 'phases: []'.
+    phases:
+      - 75
+      - 50
+      - 25
+    # Chaque phase franchie : ses délais (salves, plongeons) sont multipliés par ce facteur (0.85 : 15 % plus court) et sa
+    # vitesse augmente de ce bonus (0.12 : 12 %).
+    phase-speedup: 0.85
+    phase-speed-bonus: 0.12
 
-    # --- ATTAQUE À DISTANCE (trois boules de feu du dragon) ---
+    # --- VOL ---
+    # Il tourne autour de la joueuse ou du joueur le plus proche : rayon du cercle, hauteur au-dessus de ses yeux, vitesse du
+    # tour en degrés par tick (4 = un tour en 4,5 secondes).
+    flight:
+      orbit-radius: 9.0
+      orbit-height: 4.0
+      orbit-degrees-per-tick: 4.0
+
+    # --- ATTAQUE À DISTANCE (salve de boules de feu du dragon) ---
     ranged-attack:
       enabled: true
       # Temps en ticks entre chaque salve.
       cooldown-ticks: 100
-      # Distance minimale (au carré) pour tirer : 25.0 = 5 blocs. Plus près, le boss frappe au corps à corps.
+      # Distance minimale (au carré) pour tirer : 25.0 = 5 blocs. Distance maximale en blocs. La cible est tirée au hasard
+      # parmi les joueurs à portée.
       min-range-squared: 25.0
+      max-range: 40.0
+      # Boules de feu par salve, et boules de feu en plus à chaque phase franchie (au plus 9 en tout).
+      fireballs: 3
+      fireballs-per-phase: 1
       sound:
         sound: "ENTITY_ENDER_DRAGON_SHOOT"
         volume: 3.0
         pitch: 1.0
+
+    # --- PLONGEON ---
+    dive:
+      enabled: true
+      # Délai entre la fin d'un plongeon (ou du réveil) et le suivant.
+      cooldown-ticks: 220
+      # Le joueur visé est tiré au hasard parmi ceux qui sont à moins de range blocs.
+      range: 32.0
+      # Temps total de la mise en position, en ticks : le dragon se cabre au-dessus de sa proie (qu'il suit), puis pendant les
+      # lock-ticks derniers ticks l'endroit visé est fixé (cercle de particules) et il ne bouge plus.
+      warning-ticks: 32
+      lock-ticks: 14
+      # Vitesse de la descente, en blocs par tick.
+      speed: 1.7
+      # Rayon de l'impact, en blocs (c'est aussi le rayon du cercle d'avertissement).
+      hit-radius: 4.5
+      # Dégâts normaux (arrêtés par l'armure), part des PV max des joueurs touchés retirée en plus directement, recul.
+      damage: 28.0
+      true-damage-percent: 12.0
+      knockback: 1.2
+      # Durée de l'étourdissement après l'impact, et multiplicateur des dégâts qu'il reçoit pendant ce temps (appliqué après le
+      # plafond max-hit-percent).
+      stun-ticks: 50
+      stun-damage-multiplier: 1.5
+      # Entendu autour du dragon et par le joueur visé, au début de la mise en position.
+      warning-sound:
+        sound: "ENTITY_ENDER_DRAGON_GROWL"
+        volume: 3.0
+        pitch: 1.4
+      # Cercle d'avertissement au sol : count = nombre de points du cercle.
+      warning-particles:
+        particle: "FLAME"
+        count: 32
+        speed: 0.0
+      impact-sound:
+        sound: "ENTITY_GENERIC_EXPLODE"
+        volume: 3.0
+        pitch: 0.7
+      impact-particles:
+        particle: "EXPLOSION_EMITTER"
+        count: 2
+        spread: 1.2
+        speed: 0.0
+      # Autour de sa tête pendant l'étourdissement.
+      stun-particles:
+        particle: "ELECTRIC_SPARK"
+        count: 6
+        spread: 1.0
+        speed: 0.2
+
+    # --- RUGISSEMENT (à chaque seuil de `phases`) ---
+    roar:
+      enabled: true
+      # Durée pendant laquelle le dragon est invulnérable, se cabre et tremble.
+      duration-ticks: 50
+      # Souffle final : rayon en blocs, dégâts normaux, part des PV max retirée en plus directement, recul horizontal et vertical.
+      radius: 11.0
+      damage: 16.0
+      true-damage-percent: 6.0
+      knockback-horizontal: 1.9
+      knockback-vertical: 0.7
+      start-sound:
+        sound: "ENTITY_ENDER_DRAGON_GROWL"
+        volume: 6.0
+        pitch: 0.6
+      blast-sound:
+        sound: "ENTITY_WARDEN_SONIC_BOOM"
+        volume: 3.0
+        pitch: 0.7
+      # Autour du dragon pendant qu'il rugit.
+      aura-particles:
+        particle: "PORTAL"
+        count: 14
+        spread: 1.4
+        speed: 0.6
+      # Anneau du souffle : count = nombre de points de l'anneau.
+      blast-particles:
+        particle: "CLOUD"
+        count: 72
+        speed: 0.0
 
     # --- EFFETS D'APPARITION ---
     spawn-explosion:
@@ -229,7 +346,8 @@ bosses:
       sound: "ENTITY_ENDER_DRAGON_GROWL"
       volume: 4.0
       pitch: 2.0
-      delay: 3
+      delay: 5
+    # Joué à la mort, après le final (voir death).
     death-sound:
       sound: "ENTITY_WITHER_DEATH"
       volume: 2.0
@@ -238,10 +356,15 @@ bosses:
       sound: "ENTITY_WITHER_HURT"
       volume: 2.0
       pitch: 0.1
+    # Un coup est reçu pendant le rugissement (invulnérable).
+    blocked-sound:
+      sound: "BLOCK_ANVIL_LAND"
+      volume: 1.0
+      pitch: 1.6
 
     # --- PARTICULES ---
     particles:
-      # Autour du boss tant qu'il poursuit un joueur, toutes les interval-ticks ticks.
+      # Autour du boss, toutes les interval-ticks ticks.
       ambient:
         enabled: true
         particle: "REVERSE_PORTAL"
@@ -249,10 +372,92 @@ bosses:
         speed: 0.05
         interval-ticks: 4
 
+    # --- MORT ---
+    # Le coup fatal est retenu : le dragon s'affaisse en tournant sur lui-même de plus en plus vite, tremble, des particules
+    # l'entourent en spirale et le son monte ; puis le final éclate (explosion, éclats, deux anneaux qui s'élargissent, colonne
+    # de lumière) et le coup de grâce tombe. Les récompenses sont données à ce moment. Le vide et /kill passent sans scène.
+    death:
+      enabled: true
+      duration-ticks: 90
+      # Tremblement (blocs) atteint à la fin, hauteur gagnée (négatif : il s'affaisse) et vitesse de rotation atteinte à la
+      # fin (degrés par tick, 0 : il ne tourne pas).
+      shake: 0.35
+      lift: -2.5
+      spin-degrees: 35.0
+      # Éclats projetés au final : un bloc (vide : aucun) et leur nombre.
+      debris: "OBSIDIAN"
+      debris-count: 90
+      # Au début de la mort.
+      start-sound:
+        sound: "ENTITY_ENDER_DRAGON_GROWL"
+        volume: 6.0
+        pitch: 0.5
+      # Toutes les pulse-interval-ticks ticks ; la hauteur monte de pulse-pitch-growth jusqu'à la fin.
+      pulse-sound:
+        sound: "ENTITY_ENDER_DRAGON_HURT"
+        volume: 3.0
+        pitch: 0.6
+      pulse-interval-ticks: 10
+      pulse-pitch-growth: 1.0
+      # Spirale autour du boss, chaque tick : count = nombre de points.
+      aura-particles:
+        particle: "END_ROD"
+        count: 8
+        speed: 0.0
+      # Cœur de l'explosion finale.
+      burst-particles:
+        particle: "EXPLOSION_EMITTER"
+        count: 3
+        spread: 2.0
+        speed: 0.0
+      # Anneaux qui s'élargissent jusqu'à ring-radius blocs : count = nombre de points par anneau.
+      ring-particles:
+        particle: "END_ROD"
+        count: 56
+        speed: 0.0
+      ring-radius: 14.0
+      # Colonne de lumière qui monte jusqu'à pillar-height blocs.
+      pillar-particles:
+        particle: "END_ROD"
+        count: 2
+        spread: 0.3
+        speed: 0.02
+      pillar-height: 28.0
+      finale-sound:
+        sound: "ENTITY_ENDER_DRAGON_DEATH"
+        volume: 8.0
+        pitch: 1.0
+      finale-extra-sound:
+        sound: "ENTITY_GENERIC_EXPLODE"
+        volume: 4.0
+        pitch: 0.8
+      # Entendu par les joueurs qui suivaient le combat.
+      victory-sound:
+        sound: "UI_TOAST_CHALLENGE_COMPLETE"
+        volume: 1.0
+        pitch: 1.0
+
     # --- RÉCOMPENSES ---
+    # Elles vont à tous les PARTICIPANTS, pas seulement à celui qui porte le coup fatal. Un participant est un joueur dont la
+    # contribution (PV retirés au boss) atteint min-contribution-percent % des PV max du boss.
     rewards:
-      # Points d'expérience donnés au tueur, en une seule orbe.
+      # Points d'expérience, en une seule réserve partagée entre les participants au prorata de leur contribution.
       xp-reward: 15000
+      min-contribution-percent: 2.0
+      # Nombre de fois que chaque participant lance participant-commands.
+      rolls: 1
+      # Lancées une fois pour chaque participant. Placeholders : {player} le participant, {island} le nom de l'île (sinon de
+      # son propriétaire), {world}, {x}, {y}, {z}. Pas de ';' : une commande par ligne.
+      guaranteed-commands: []
+      # Lancées `rolls` fois pour chaque participant (le tirage au sort).
+      participant-commands:
+        - "rc dragonegg-rewards {player}"
+      # Lancées une fois pour le participant qui a le plus contribué (le meilleur combattant).
+      mvp-commands:
+        - "rc dragonegg-rewards {player}"
+        - "sm {player} &7&l« &5&lSH &8&l» &7Meilleur combattant : un &5tirage bonus &7pour vous !"
+      # Lancées une fois, à la mort ({player} = celui qui a porté le coup fatal ; ignorées s'il n'y en a pas).
+      commands: []
       # Objets lâchés à la mort du boss. Pour n'en lâcher aucun, écrire 'items: []'.
       # Exemple d'objet personnalisé :
       #   - material: "DIAMOND"
@@ -264,23 +469,19 @@ bosses:
       items:
         - material: "PHANTOM_MEMBRANE"
           amount: 1
-      # Commandes lancées par la console à la mort du boss (sans le '/' initial).
-      # Placeholders : {player} le tueur, {island} le nom de l'île (sinon de son propriétaire), {world}, {x}, {y}, {z}.
-      # Les commandes contenant {player} sont ignorées si le boss meurt sans tueur.
-      commands:
-        - "rc dragonegg-rewards {player}"
 
     # PV dynamiques : PV de base + health-per-island-level × niveau de l'île + health-per-island-member × membres.
     dynamic-stats:
       enabled: true
       health-per-island-level: 0.0005
-      health-per-island-member: 15.0
+      health-per-island-member: 40.0
 
   # ---------------------------------------------------------------
   # Boss n°2 : le Creaking. IA vanilla active : il poursuit les joueurs, les frappe, et se fige quand un joueur
   # le regarde (mécanique du jeu, pas du plugin). Le plugin joue sur ce regard :
-  #   - le Noir : il aveugle les joueurs proches ; un joueur aveuglé ne le fige plus, alors le boss se téléporte
-  #     derrière lui et le frappe (la frappe est annoncée par un craquement, on l'esquive en s'éloignant) ;
+  #   - le Noir : un éclair d'obscurité de moins d'une seconde, sans annonce, qui revient souvent. Il aveugle les joueurs
+  #     proches ; un joueur aveuglé ne le fige plus, alors le boss se téléporte derrière eux et plante autant de coups que de
+  #     combattants (chaque coup est annoncé par un craquement, on l'esquive en s'éloignant) ;
   #   - le Sursaut : frappé sur place sans répit, il finit par se téléporter derrière celui qui le frappe le plus et le frapper ;
   #   - quand ses PV passent sous un seuil, il devient invulnérable et des cœurs apparaissent autour de lui : tant
   #     qu'il en reste, il ne perd aucun PV. On les brise en les FRAPPANT (clic gauche répété), pas en les minant ;
@@ -305,10 +506,10 @@ bosses:
       health-per-island-level: 0.0003
       health-per-island-member: 20.0
     # Dégâts de la frappe vanilla (corps à corps).
-    attack-damage: 18.0
+    attack-damage: 20.0
     # À chaque frappe de mêlée, part des PV MAX du joueur retirée en plus, directement : ni l'armure, ni les
     # enchantements de protection, ni l'absorption ne l'arrêtent (0 : désactivé). Voir aussi les attaques ci-dessous.
-    melee-true-damage-percent: 4.0
+    melee-true-damage-percent: 5.0
     # Vitesse de déplacement (attribut vanilla ; le Creaking vanilla marche à 0.4). Relue à chaud.
     movement-speed: 0.6
     # Armure (0 à 30) et robustesse (0 à 20) : réduisent les dégâts reçus comme pour un joueur.
@@ -356,10 +557,17 @@ bosses:
     # chaque phase ne se déclenche qu'une fois. health-percent est entre 0 et 100 exclus, hearts au moins 1.
     # Pour n'avoir aucune phase, écrire 'phases: []'.
     phases:
-      - health-percent: 66
+      - health-percent: 80
         hearts: 3
-      - health-percent: 33
+      - health-percent: 60
+        hearts: 4
+      - health-percent: 40
         hearts: 5
+      - health-percent: 20
+        hearts: 6
+    # Cœurs en plus par combattant au-delà du premier (joueurs de l'île à moins de hearts.guide.range blocs du boss), arrondi,
+    # sans jamais dépasser le double des cœurs de la phase. 0.5 : deux joueurs de plus = un cœur de plus.
+    hearts-per-extra-player: 0.5
 
     # --- CŒURS ---
     # Des cœurs éveillés flottent sur des blocs d'air de l'île, dans la couche du boss, avec un bloc solide dessous quand
@@ -423,6 +631,9 @@ bosses:
       # Contour lumineux visible à travers les blocs (true/false) et sa couleur (RRGGBB).
       glow: true
       glow-color: "FFAA00"
+      # Un cœur brisé compte comme des dégâts infligés au boss, à hauteur de ce pourcentage de ses PV max (pour les récompenses :
+      # pendant une phase le boss est invulnérable, les cœurs sont la seule façon de participer).
+      credit-percent: 1.0
       # Boussole (guide-actionbar, messages.yml) : à tous les joueurs de l'île à moins de `range` blocs du boss, tant qu'il
       # reste des cœurs. Lisible même quand le joueur est aveuglé.
       guide:
@@ -442,9 +653,9 @@ bosses:
         # Rayon en blocs.
         radius: 6.0
         # Dégâts (2 = un cœur), arrêtés par l'armure comme tout coup normal.
-        damage: 10.0
+        damage: 12.0
         # Part des PV max du joueur retirée en plus, directement (ni armure, ni protection, ni absorption). 0 : désactivé.
-        true-damage-percent: 5.0
+        true-damage-percent: 6.5
         # Recul : force horizontale (loin du boss) et verticale (vers le haut).
         knockback-horizontal: 1.4
         knockback-vertical: 0.6
@@ -486,58 +697,52 @@ bosses:
           spread: 0.4
           speed: 0.0
 
-      # Le Noir : le boss éteint la lumière. Annonce (titre, son), puis les joueurs à portée sont aveuglés pendant
-      # `duration-ticks`. Un joueur aveuglé ne fige plus le Creaking du regard : le boss se téléporte derrière l'un d'eux
-      # (craquement à l'arrivée, c'est le seul indice), puis le frappe `strike-delay-ticks` plus tard. Le joueur esquive en
-      # s'éloignant de plus de `strike-reach` blocs. Un joueur qui retire son aveuglement (lait...) n'est plus pris pour cible.
-      # Sans joueur à portée, rien ne se passe et le délai n'est pas consommé.
+      # Le Noir : un éclair d'obscurité de moins d'une seconde, sans annonce, qui revient souvent. Les joueurs à portée sont
+      # aveuglés ; un joueur aveuglé ne fige plus le Creaking du regard, alors le boss se téléporte derrière eux (craquement à
+      # l'arrivée, c'est le seul indice) et plante un coup par combattant (voir hits-per-player). Chaque coup tombe
+      # `strike-delay-ticks` après l'arrivée du boss : le joueur l'esquive en s'éloignant de plus de `strike-reach` blocs de
+      # l'endroit où le boss est arrivé. Un joueur qui retire son aveuglement (lait...) perd son coup.
+      # Sans joueur à portée, rien ne se passe et le délai n'est pas consommé. Les joueurs invisibles (vanish), en créatif ou en
+      # spectateur ne sont jamais visés.
       blackout:
         enabled: true
-        # Délai entre la fin d'un Noir et l'annonce du suivant.
-        cooldown-ticks: 360
-        # Chaque phase d'invulnérabilité déclenchée multiplie ce délai par ce facteur (0.8 : 20 % plus court par phase).
-        phase-cooldown-factor: 0.8
+        # Délai entre la fin d'un Noir et le suivant, plus ou moins cooldown-jitter-ticks tirés au hasard (pas de rythme à apprendre).
+        cooldown-ticks: 80
+        cooldown-jitter-ticks: 30
+        # Chaque phase d'invulnérabilité déclenchée multiplie ce délai par ce facteur (0.9 : 10 % plus court par phase).
+        phase-cooldown-factor: 0.9
         # Après le début d'une phase, le Noir attend au moins ce délai (le temps de lire le titre et de repérer les cœurs).
-        after-phase-delay-ticks: 120
+        after-phase-delay-ticks: 60
         # Rayon, en blocs, autour du boss.
         radius: 30.0
-        # Durée de l'annonce, avant l'aveuglement.
-        telegraph-ticks: 30
-        # Durée de l'aveuglement.
-        duration-ticks: 100
-        # Délai avant la première téléportation, puis entre deux téléportations. 100 / 30 = trois frappes par Noir.
-        first-blink-delay-ticks: 10
-        blink-interval-ticks: 30
+        # Durée du noir (14 = 0,7 seconde). Il dure plus longtemps si le boss a encore des téléportations à faire (au plus
+        # max-hits × blink-interval-ticks).
+        duration-ticks: 14
+        # Délai avant la première téléportation, puis entre deux téléportations.
+        first-blink-delay-ticks: 2
+        blink-interval-ticks: 2
+        # Coups par joueur à portée (1.0 : autant de coups que de combattants, chacun sur un joueur différent), et plafond.
+        hits-per-player: 1.0
+        max-hits: 8
         # Distance, en blocs, entre le boss et sa proie à l'arrivée (derrière elle quand c'est possible).
         blink-distance: 2.0
-        # Délai entre l'arrivée du boss et sa frappe : le temps d'entendre le craquement et de s'écarter.
-        strike-delay-ticks: 14
-        # Portée de la frappe, en blocs. Au-delà, le joueur l'a esquivée.
+        # Délai entre l'arrivée du boss et son coup : le temps d'entendre le craquement et de s'écarter.
+        strike-delay-ticks: 16
+        # Portée du coup, en blocs. Au-delà, le joueur l'a esquivé.
         strike-reach: 3.2
-        # Dégâts normaux de la frappe (arrêtés par l'armure) et part des PV max du joueur retirée en plus, directement.
-        strike-damage: 14.0
-        strike-true-damage-percent: 15.0
-        # Force du recul de la frappe.
+        # Dégâts normaux du coup (arrêtés par l'armure) et part des PV max du joueur retirée en plus, directement.
+        strike-damage: 18.0
+        strike-true-damage-percent: 12.0
+        # Force du recul du coup.
         strike-knockback: 0.6
         # true : le nom du boss disparaît pendant l'aveuglement (même aveugle, on le voit à travers le noir).
         hide-name: true
-        # Effets appliqués pendant le Noir. type : nom d'effet, amplifier : niveau - 1. La durée est celle de l'aveuglement.
+        # Effets appliqués pendant le Noir. type : nom d'effet, amplifier : niveau - 1. La durée est celle du noir.
         effects:
           - type: "blindness"
             amplifier: 0
           - type: "darkness"
             amplifier: 0
-        # Annonce, entendue par chaque joueur à portée.
-        telegraph-sound:
-          sound: "ENTITY_WARDEN_HEARTBEAT"
-          volume: 2.0
-          pitch: 0.6
-        # Autour de chaque joueur à portée pendant l'annonce.
-        telegraph-particles:
-          particle: "SCULK_SOUL"
-          count: 6
-          spread: 0.5
-          speed: 0.02
         # Craquement à l'arrivée du boss : positionnel, c'est ce qui indique d'où vient la menace.
         blink-sound:
           sound: "ENTITY_CREAKING_ACTIVATE"
@@ -588,8 +793,8 @@ bosses:
         # Portée de la frappe, en blocs. Au-delà, la cible l'a esquivée.
         strike-reach: 3.2
         # Dégâts normaux (arrêtés par l'armure) et part des PV max de la cible retirée en plus, directement.
-        strike-damage: 12.0
-        strike-true-damage-percent: 8.0
+        strike-damage: 14.0
+        strike-true-damage-percent: 10.0
         # Force du recul de la frappe.
         strike-knockback: 0.8
         # Entendu par la cible et autour du boss pendant l'avertissement.
@@ -640,15 +845,96 @@ bosses:
       speed: 0.02
       interval-ticks: 4
 
+    # --- MORT ---
+    # Le coup fatal est retenu : le Creaking s'élève en tremblant, des âmes tournent autour de lui et les craquements montent ;
+    # puis le final éclate (confettis dorés, éclats de bois pâle, deux anneaux d'âmes qui s'élargissent, colonne de lumière) et le
+    # coup de grâce tombe. Les récompenses sont données à ce moment. Le vide et /kill passent sans scène.
+    death:
+      enabled: true
+      duration-ticks: 80
+      # Tremblement (blocs) atteint à la fin, hauteur gagnée et vitesse de rotation atteinte à la fin (degrés par tick).
+      shake: 0.25
+      lift: 2.5
+      spin-degrees: 12.0
+      # Éclats projetés au final : un bloc (vide : aucun) et leur nombre.
+      debris: "PALE_OAK_LOG"
+      debris-count: 70
+      # Au début de la mort.
+      start-sound:
+        sound: "ENTITY_CREAKING_ACTIVATE"
+        volume: 4.0
+        pitch: 0.4
+      # Toutes les pulse-interval-ticks ticks ; la hauteur monte de pulse-pitch-growth jusqu'à la fin.
+      pulse-sound:
+        sound: "BLOCK_CREAKING_HEART_HURT"
+        volume: 2.0
+        pitch: 0.5
+      pulse-interval-ticks: 8
+      pulse-pitch-growth: 1.2
+      # Spirale autour du boss, chaque tick : count = nombre de points.
+      aura-particles:
+        particle: "SCULK_SOUL"
+        count: 8
+        speed: 0.0
+      # Cœur de l'explosion finale.
+      burst-particles:
+        particle: "TOTEM_OF_UNDYING"
+        count: 70
+        spread: 1.2
+        speed: 0.4
+      # Anneaux qui s'élargissent jusqu'à ring-radius blocs : count = nombre de points par anneau.
+      ring-particles:
+        particle: "SCULK_SOUL"
+        count: 48
+        speed: 0.0
+      ring-radius: 11.0
+      # Colonne de lumière qui monte jusqu'à pillar-height blocs.
+      pillar-particles:
+        particle: "END_ROD"
+        count: 2
+        spread: 0.25
+        speed: 0.02
+      pillar-height: 22.0
+      finale-sound:
+        sound: "BLOCK_CREAKING_HEART_BREAK"
+        volume: 3.0
+        pitch: 0.5
+      finale-extra-sound:
+        sound: "ENTITY_CREAKING_DEATH"
+        volume: 3.0
+        pitch: 0.6
+      # Entendu par les joueurs qui suivaient le combat.
+      victory-sound:
+        sound: "UI_TOAST_CHALLENGE_COMPLETE"
+        volume: 1.0
+        pitch: 1.0
+
     # --- RÉCOMPENSES ---
+    # Elles vont à tous les PARTICIPANTS, pas seulement à celui qui porte le coup fatal. Un participant est un joueur dont la
+    # contribution (PV retirés au boss, et chaque cœur brisé pour hearts.credit-percent %) atteint min-contribution-percent %
+    # des PV max du boss.
     rewards:
-      # Points d'expérience donnés au tueur, en une seule orbe.
+      # Points d'expérience, en une seule réserve partagée entre les participants au prorata de leur contribution.
       xp-reward: 20000
-      # Objets lâchés à la mort (même format que le dragon). Aucun par défaut : les récompenses passent par la commande.
-      items: []
-      # Commandes lancées par la console à la mort du boss (mêmes placeholders que le dragon).
-      commands:
+      min-contribution-percent: 2.0
+      # Nombre de fois que chaque participant lance participant-commands.
+      rolls: 2
+      # Lancées une fois pour chaque participant : un plancher, personne ne repart les mains vides. Placeholders : {player} le
+      # participant, {island} le nom de l'île (sinon de son propriétaire), {world}, {x}, {y}, {z}. Pas de ';' : une commande par ligne.
+      guaranteed-commands:
+        - "shcrates givekey {player} rare 1 physical"
+        - "sm {player} &7&l« &a&lSH &8&l» &7Vous venez de recevoir &c1 &6Clé Rare &7pour avoir combattu le Boss &2&lCreaking&7."
+      # Lancées `rolls` fois pour chaque participant (le tirage au sort).
+      participant-commands:
         - "rc creaking-rewards {player}"
+      # Lancées une fois pour le participant qui a le plus contribué (le meilleur combattant).
+      mvp-commands:
+        - "rc creaking-rewards {player}"
+        - "sm {player} &7&l« &6&lSH &8&l» &7Meilleur combattant : un &6tirage bonus &7pour vous !"
+      # Lancées une fois, à la mort ({player} = celui qui a porté le coup fatal ; ignorées s'il n'y en a pas).
+      commands: []
+      # Objets lâchés à la mort (même format que le dragon). Aucun par défaut : les récompenses passent par les commandes.
+      items: []
 
 # ----------------------------------------------------------------#
 #                      PERMISSION D'ÎLE                           #

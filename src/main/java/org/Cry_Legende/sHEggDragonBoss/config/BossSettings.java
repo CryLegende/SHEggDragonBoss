@@ -18,9 +18,14 @@ public interface BossSettings {
 
     Set<EntityDamageEvent.DamageCause> immuneCauses();
 
+    /** Aucun coup ne retire plus de ce pourcentage des PV max du boss (0 : pas de plafond). */
+    double maxHitPercent();
+
     Sfx hurtSound();
 
     Sfx deathSound();
+
+    DeathSettings death();
 
     Rewards rewards();
 }

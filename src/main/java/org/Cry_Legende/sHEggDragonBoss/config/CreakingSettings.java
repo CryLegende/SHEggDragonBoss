@@ -30,6 +30,7 @@ public record CreakingSettings(
     double maxHitPercent,
     Arena arena,
     List<Phase> phases,
+    double heartsPerExtraPlayer,
     Hearts hearts,
     Shockwave shockwave,
     Resin resin,
@@ -45,6 +46,7 @@ public record CreakingSettings(
     Fx shieldAuraFx,
     int shieldAuraIntervalTicks,
     Rewards rewards,
+    DeathSettings death,
     Texts texts
 ) implements BossSettings {
 
@@ -87,7 +89,8 @@ public record CreakingSettings(
         int guideIntervalTicks,
         double guideRange,
         boolean glow,
-        int glowColor
+        int glowColor,
+        double creditPercent
     ) {
     }
 
@@ -124,19 +127,23 @@ public record CreakingSettings(
     }
 
     /**
-     * Le Noir : le boss aveugle les joueurs proches. Un joueur aveuglé ne fige plus le Creaking du regard, alors le boss
-     * se téléporte derrière lui et le frappe après un court délai (esquivable en s'éloignant, ou en retirant l'aveuglement).
+     * Le Noir : un éclair d'obscurité, sans annonce. Les joueurs proches sont aveuglés moins d'une seconde ; le temps que
+     * dure le noir, le boss se téléporte derrière eux et plante autant de coups que de combattants
+     * ({@code hitsPerPlayer} par joueur). Chaque coup tombe {@code strikeDelayTicks} après l'arrivée du boss, et
+     * s'esquive en s'éloignant.
      */
     public record Blackout(
         boolean enabled,
         int cooldownTicks,
+        int cooldownJitterTicks,
         double phaseCooldownFactor,
         int afterPhaseDelayTicks,
         double radius,
-        int telegraphTicks,
         int durationTicks,
         int firstBlinkDelayTicks,
         int blinkIntervalTicks,
+        double hitsPerPlayer,
+        int maxHits,
         double blinkDistance,
         int strikeDelayTicks,
         double strikeReach,
@@ -145,8 +152,6 @@ public record CreakingSettings(
         double strikeKnockback,
         boolean hideName,
         List<BlindEffect> effects,
-        Sfx telegraphSound,
-        Fx telegraphFx,
         Sfx blinkSound,
         Fx blinkFx,
         Sfx strikeSound,
@@ -190,8 +195,6 @@ public record CreakingSettings(
         String heartHint,
         String heartDestroyed,
         String shieldEnd,
-        String blackoutTitle,
-        String blackoutSubtitle,
         String dodge,
         String sursautWarning
     ) {

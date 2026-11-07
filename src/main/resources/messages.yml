@@ -95,11 +95,27 @@ rituals:
 # ----------------------------------------------------------------#
 bosses:
   # Boss n°1 : le dragon.
+  # Placeholders du combat : %phase% rugissements déjà poussés, %phases% nombre de rugissements, %name% nom du boss.
   dragon:
     # Nom affiché au-dessus du boss.
     name: "&5Jeune Ender Dragon"
-    # Barre de boss. Placeholders : %name%, %current_health%, %max_health%.
+    # Barre de boss. Placeholders : %name%, %current_health%, %max_health%, %phase%, %phases%.
     bossbar-title: "%name% &7- &c&l%current_health% &4/ &c&l%max_health% &4❤"
+    # Barre pendant le rugissement (le boss est invulnérable), puis pendant sa mort.
+    bossbar-roar-title: "%name% &7- &6&lINVULNÉRABLE &7- &eIl rugit... &7(&d%phase%&7/&d%phases%&7)"
+    bossbar-dying-title: "%name% &7- &c&lIl s'effondre..."
+    # Le dragon rugit (seuil de PV franchi) : titre et sous-titre à l'écran, puis message dans le chat. Vide : rien.
+    roar-title: "&5&lLE DRAGON RUGIT"
+    roar-subtitle: "&7Rage &d%phase%&7/&d%phases% &8- &eécartez-vous du souffle"
+    roar-chat: "&7&l« &5&lSH &8&l» &7Le &5Jeune Ender Dragon &7rugit ! Il est &cplus rapide &7et crache &cplus de feu&7. &eÉloignez-vous &7du souffle !"
+    # Barre d'action du joueur que le dragon va prendre pour cible de son plongeon : le cercle de flammes au sol montre l'impact.
+    dive-warning: "&c&l⚠ %name% &7plonge sur &evous &8» &equittez le cercle&7 !"
+    # Mort du boss : titre et sous-titre à l'écran, puis classement dans le chat (header, puis une ligne par joueur).
+    # Placeholders de line : %rank%, %player%, %percent% (part du combat, en %).
+    death-title: "&5&lDRAGON VAINCU"
+    death-subtitle: "&7Le &5Jeune Ender Dragon &7s'est effondré"
+    death-summary-header: "&7&l« &5&lSH &8&l» &7Le &5%name% &7est tombé ! &dMeilleurs combattants &7:"
+    death-summary-line: "  &8#%rank% &d%player% &8- &f%percent%% &7du combat"
 
   # Boss n°2 : le Creaking.
   # Placeholders du combat : %hearts% cœurs restants, %phase% phase en cours, %phases% nombre de phases,
@@ -129,9 +145,14 @@ bosses:
     heart-destroyed: "&7&l« &e&lSH &8&l» &e%player% &7brise un cœur. Cœurs restants : &e%hearts%&7."
     # Le dernier cœur est tombé : le boss peut de nouveau être blessé.
     shield-end: "&7&l« &a&lSH &8&l» &7Le dernier cœur est tombé : le Creaking est de nouveau &avulnérable &7!"
-    # Le Noir approche : titre et sous-titre affichés aux joueurs à portée. Vide : aucun.
-    blackout-title: "&8&lLe noir tombe..."
-    blackout-subtitle: "&7Il ne s'arrête plus. &eÉcoutez&7 et &eécartez-vous&7."
+    # Barre de boss pendant sa mort.
+    bossbar-dying-title: "%name% &7- &c&lIl s'éteint..."
+    # Mort du boss : titre et sous-titre à l'écran, puis classement dans le chat (header, puis une ligne par joueur).
+    # Placeholders de line : %rank%, %player%, %percent% (part du combat, en %).
+    death-title: "&#FF7F11&lCREAKING VAINCU"
+    death-subtitle: "&7Le silence retombe sur l'île"
+    death-summary-header: "&7&l« &#FF7F11&lSH &8&l» &7Le &#FF7F11Creaking &7est tombé ! &6Meilleurs combattants &7:"
+    death-summary-line: "  &8#%rank% &6%player% &8- &f%percent%% &7du combat"
     # Barre d'action du joueur qui esquive la frappe du boss.
     dodge: "&a&lEsquivé !"
     # Barre d'action du joueur que le boss vise après avoir été frappé trop longtemps sur place (Sursaut). Le boss arrive
@@ -166,21 +187,22 @@ items:
 #                 JOURNAL DES BOSS (SHLogs, fichier boss)         #
 # ----------------------------------------------------------------#
 # Une ligne par évènement, écrite dans le fichier boss de SHLogs (qui ajoute la date). Pas de codes couleur.
-# Placeholders : %island% (voir island-of), %health% et %max% PV, %phase% %phases% %hearts% pour le Creaking,
-# %killer% le tueur, %players% nombre de joueurs touchés par le Noir, %player% et %seconds% pour le Sursaut.
+# Placeholders : %island% (voir island-of), %health% et %max% PV, %phase% %phases% %hearts% pour le Creaking (%phase% %phases%
+# pour le dragon), %killer% le tueur, %player% et %seconds% pour le Sursaut, %participants% %mvp% %names% pour les récompenses.
 journal:
   island-of: "l'île de %owner%"
   island-unknown: "une île inconnue"
   killer-unknown: "Cause inconnue"
   dragon-spawned: "Un boss est apparu sur %island% (Vie: %health%/%max%)."
-  dragon-woken: "Un boss dormant a été réveillé sur %island% (Vie: %health%/%max%)."
-  dragon-restored: "Un boss a été restauré sur %island% (Vie: %health%/%max%)."
+  dragon-woken: "Un boss dormant a été réveillé sur %island% (Vie: %health%/%max%, rage %phase%/%phases%)."
+  dragon-restored: "Un boss a été restauré sur %island% (Vie: %health%/%max%, rage %phase%/%phases%)."
+  dragon-phase-start: "Boss sur %island% : il rugit, rage %phase%/%phases% (Vie: %health%/%max%)."
   dragon-killed: "Le boss sur %island% a été tué par %killer%."
+  rewards: "Récompenses du boss sur %island% : %participants% participant(s), meilleur combattant %mvp% (%names%)."
   creaking-spawned: "Un boss Creaking est apparu sur %island% (Vie: %health%/%max%)."
   creaking-woken: "Un boss Creaking dormant a été réveillé sur %island% (Vie: %health%/%max%, phase %phase%/%phases%, %hearts% cœur(s) à détruire)."
   creaking-restored: "Un boss Creaking a été restauré sur %island% après un redémarrage (phase %phase%/%phases%, %hearts% cœur(s) à détruire)."
   creaking-killed: "Le boss Creaking sur %island% a été tué par %killer%."
-  creaking-blackout: "Boss Creaking sur %island% : le Noir tombe sur %players% joueur(s)."
   creaking-sursaut: "Boss Creaking sur %island% : frappé sur place depuis %seconds% s, il se retourne contre %player%."
   creaking-phase-start: "Boss Creaking sur %island% : phase %phase%/%phases%, %hearts% cœur(s) à détruire (Vie: %health%/%max%)."
   creaking-phase-end: "Boss Creaking sur %island% : phase %phase%/%phases% terminée, le boss est de nouveau vulnérable (Vie: %health%/%max%)."

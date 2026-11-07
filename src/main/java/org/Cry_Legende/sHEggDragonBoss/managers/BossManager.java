@@ -157,7 +157,7 @@ public class BossManager {
 
     private void createController(BossType type, Island island, Location location, double maxHealth, double currentHealth, int phase, int heartsLeft, BossController.StartMode mode) {
         switch (type) {
-            case DRAGON -> DragonBossController.spawn(plugin, this, island, location, maxHealth, currentHealth, mode);
+            case DRAGON -> DragonBossController.spawn(plugin, this, island, location, maxHealth, currentHealth, phase, mode);
             case CREAKING -> CreakingBossController.spawn(plugin, this, island, location, maxHealth, currentHealth, phase, heartsLeft, mode);
         }
     }

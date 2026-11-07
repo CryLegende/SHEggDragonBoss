@@ -7,7 +7,6 @@ import org.Cry_Legende.sHEggDragonBoss.config.Fx;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.HeartManager;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
@@ -16,12 +15,9 @@ import org.bukkit.block.Block;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.entity.Creaking;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Projectile;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
@@ -29,9 +25,11 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,8 +40,9 @@ import java.util.concurrent.ThreadLocalRandom;
  * Boss n°2 : le Creaking. L'IA vanilla reste active (poursuite, attaque, gel quand un joueur le regarde : rien de cela
  * n'est réimplémenté). Le plugin joue sur ce regard et ajoute :
  * <ul>
- *   <li><b>le Noir</b> : il aveugle les joueurs proches (et cache son nom) ; un joueur aveuglé ne le fige plus, alors le boss
- *       se téléporte derrière lui, à sa hauteur s'il vole, et le frappe après un court délai (esquivable) ;</li>
+ *   <li><b>le Noir</b> : un éclair d'obscurité de moins d'une seconde, sans annonce, qui revient souvent. Il aveugle les joueurs
+ *       proches (et cache le nom du boss) ; un joueur aveuglé ne le fige plus, alors le boss se téléporte derrière eux, à leur
+ *       hauteur s'ils volent, et plante autant de coups que de combattants. Chaque coup tombe après un court délai (esquivable) ;</li>
  *   <li><b>le Sursaut</b> : le regard fige le boss, mais frappé sur place sans répit il finit par se retourner contre celui
  *       qui le frappe le plus : même téléportation et même frappe esquivable que le Noir ;</li>
  *   <li>des phases d'invulnérabilité à certains seuils de PV, protégées par des cœurs que les joueurs frappent à la main
@@ -58,8 +57,11 @@ public class CreakingBossController extends BossController implements HeartOwner
 
     private enum BlackoutState {
         IDLE,
-        TELEGRAPH,
         ACTIVE
+    }
+
+    /** Un coup du Noir déjà plantée : le boss est arrivé en {@code origin}, le coup tombe au tick {@code tick}. */
+    private record PendingStrike(UUID victim, Location origin, long tick) {
     }
 
     private enum SursautState {
@@ -94,17 +96,17 @@ public class CreakingBossController extends BossController implements HeartOwner
 
     private BlackoutState blackoutState = BlackoutState.IDLE;
     private long nextBlackoutTick;
-    /** Fin de l'état en cours (annonce ou fenêtre du Noir). */
+    /** Fin de la fenêtre du Noir en cours. */
     private long blackoutStateEnd;
     private long nextBlinkTick;
-    /** Tick de la frappe annoncée, ou -1 s'il n'y en a pas. */
-    private long strikeTick = -1;
-    private UUID strikeTarget;
-    private UUID lastBlinkTarget;
+    /** Vrai quand le noir est levé (les coups déjà plantés tombent encore un instant). */
+    private boolean blindnessLifted;
+    /** Joueurs que le boss va viser pendant le Noir en cours, dans l'ordre. */
+    private final List<UUID> blinkQueue = new ArrayList<>();
+    /** Coups plantés par le Noir en cours, qui tomberont à leur tick. */
+    private final List<PendingStrike> pendingStrikes = new ArrayList<>();
     /** Joueurs aveuglés par le Noir en cours. */
     private final Set<UUID> blinded = new HashSet<>();
-    /** Vrai pendant un coup donné par le plugin lui-même : le bonus de mêlée ne s'y ajoute pas une seconde fois. */
-    private boolean dealingDamage;
 
     private SursautState sursautState = SursautState.IDLE;
     /** Fin de l'avertissement du Sursaut. */
@@ -141,6 +143,7 @@ public class CreakingBossController extends BossController implements HeartOwner
         this.nextSursautTick = settings.sursaut().cooldownTicks();
         // Un boss repris après un redémarrage a pu être sauvegardé en plein Noir (nom caché) ou en plein vol stationnaire (sans gravité)
         creaking.setGravity(true);
+        creaking.setAI(true);
         showName(true);
         persistState();
     }
@@ -210,6 +213,26 @@ public class CreakingBossController extends BossController implements HeartOwner
     }
 
     @Override
+    protected boolean usesVanillaAi() {
+        return true;
+    }
+
+    /** La mort commence : ni Noir ni Sursaut en cours, plus de cœurs, plus personne d'aveuglé. */
+    @Override
+    protected void onDeathStart() {
+        blackoutState = BlackoutState.IDLE;
+        blinkQueue.clear();
+        pendingStrikes.clear();
+        sursautState = SursautState.IDLE;
+        hovering = false;
+        clearBlindness();
+        heartManager.removeAll(boss.getUniqueId());
+        heartsLeft = 0;
+        heartsToPlace = 0;
+        showName(true);
+    }
+
+    @Override
     protected int savedPhase() {
         return phasesStarted;
     }
@@ -271,91 +294,87 @@ public class CreakingBossController extends BossController implements HeartOwner
     // ------------------------------------------------------------------ le Noir
 
     /**
-     * Le Noir : annonce (son, titre, particules), puis fenêtre où les joueurs proches sont aveuglés. Pendant la fenêtre
-     * le boss se téléporte derrière un joueur aveuglé, puis le frappe. Rien ne se passe sans joueur à portée.
+     * Le Noir : un éclair d'obscurité, sans annonce. Les joueurs proches sont aveuglés moins d'une seconde ; le temps que
+     * dure le noir, le boss se téléporte derrière eux et plante un coup par combattant ({@code hits-per-player} par joueur).
+     * Rien ne se passe sans joueur à portée.
      */
     private void tickBlackout() {
         CreakingSettings.Blackout cfg = settings.blackout();
-        if (!cfg.enabled()) return;
+        if (!cfg.enabled()) {
+            // Désactivé à chaud en plein Noir : on referme proprement
+            if (blackoutState != BlackoutState.IDLE) endWindow();
+            return;
+        }
         switch (blackoutState) {
             case IDLE -> {
                 // Le Noir attend la fin d'un Sursaut en cours : le boss ne mène qu'une téléportation à la fois
                 if (tickCounter < nextBlackoutTick || tickCounter % settings.checkIntervalTicks() != 0
                     || sursautState != SursautState.IDLE) return;
                 List<Player> victims = playersWithin(cfg.radius());
-                if (!victims.isEmpty()) startTelegraph(cfg, victims);
-            }
-            case TELEGRAPH -> {
-                if (tickCounter >= blackoutStateEnd) {
-                    startWindow(cfg);
-                } else if (tickCounter % 5 == 0) {
-                    for (Player player : playersWithin(cfg.radius())) cfg.telegraphFx().spawn(player.getLocation().add(0, 1.0, 0));
-                }
+                if (!victims.isEmpty()) startWindow(cfg, victims);
             }
             case ACTIVE -> blackoutStep(cfg);
         }
     }
 
-    private void startTelegraph(CreakingSettings.Blackout cfg, List<Player> victims) {
-        blackoutState = BlackoutState.TELEGRAPH;
-        blackoutStateEnd = tickCounter + cfg.telegraphTicks();
-        for (Player victim : victims) {
-            // Joué pour chaque joueur : le son doit s'entendre aussi loin que le rayon du Noir
-            cfg.telegraphSound().playFor(victim);
-            PlayerText.title(victim, format(settings.texts().blackoutTitle()), format(settings.texts().blackoutSubtitle()));
-        }
-        plugin.getLogManager().log(journal("creaking-blackout", islandLabel(), "players", String.valueOf(victims.size())));
-    }
-
-    private void startWindow(CreakingSettings.Blackout cfg) {
-        List<Player> victims = playersWithin(cfg.radius());
+    private void startWindow(CreakingSettings.Blackout cfg, List<Player> victims) {
         blinded.clear();
-        if (victims.isEmpty()) {
-            endWindow(cfg);
-            return;
-        }
-        // Un peu plus longtemps que la fenêtre : une frappe annoncée en fin de fenêtre va toujours au bout
-        int duration = cfg.durationTicks() + 20;
+        pendingStrikes.clear();
+        blinkQueue.clear();
+        blindnessLifted = false;
+        // Un effet qui a moins d'une seconde à vivre s'estompe déjà : le noir est posé pour plus longtemps que la fenêtre
+        // et levé à la main quand elle se termine
+        int effectTicks = Math.max(20, cfg.durationTicks()) + 20;
         for (Player victim : victims) {
             for (CreakingSettings.BlindEffect effect : cfg.effects()) {
-                victim.addPotionEffect(new PotionEffect(effect.type(), duration, effect.amplifier(), false, false, true));
+                victim.addPotionEffect(new PotionEffect(effect.type(), effectTicks, effect.amplifier(), false, false, true));
             }
             blinded.add(victim.getUniqueId());
         }
         // Même aveuglés, les joueurs verraient son nom à travers le noir : il disparaît le temps de la fenêtre
         if (cfg.hideName()) showName(false);
+
+        // Autant de coups que de combattants (hits-per-player par joueur), chacun sur un joueur différent tant que c'est possible
+        int hits = (int) Math.max(1, Math.min(cfg.maxHits(), Math.round(victims.size() * cfg.hitsPerPlayer())));
+        List<UUID> order = new ArrayList<>(blinded);
+        Collections.shuffle(order);
+        for (int i = 0; i < hits; i++) blinkQueue.add(order.get(i % order.size()));
+
         blackoutState = BlackoutState.ACTIVE;
         blackoutStateEnd = tickCounter + cfg.durationTicks();
         nextBlinkTick = tickCounter + cfg.firstBlinkDelayTicks();
-        strikeTick = -1;
-        strikeTarget = null;
     }
 
     private void blackoutStep(CreakingSettings.Blackout cfg) {
-        if (strikeTick >= 0) {
-            if (tickCounter >= strikeTick) resolveStrike(cfg);
-            return;
-        }
-        if (tickCounter >= blackoutStateEnd) {
-            endWindow(cfg);
-            return;
-        }
-        if (tickCounter >= nextBlinkTick) blink(cfg);
+        // Le noir se lève quand la fenêtre est écoulée et que le boss a fini de se téléporter
+        if (!blindnessLifted && tickCounter >= blackoutStateEnd && blinkQueue.isEmpty()) liftBlindness();
+        if (!blinkQueue.isEmpty() && tickCounter >= nextBlinkTick) blink(cfg);
+        resolveDueStrikes(cfg);
+        if (blinkQueue.isEmpty() && pendingStrikes.isEmpty() && tickCounter >= blackoutStateEnd) endWindow();
     }
 
-    private void endWindow(CreakingSettings.Blackout cfg) {
-        blackoutState = BlackoutState.IDLE;
-        blinded.clear();
-        strikeTick = -1;
-        strikeTarget = null;
-        nextBlackoutTick = tickCounter + blackoutCooldown(cfg);
-        land();
+    /** Le noir se lève : plus personne n'est aveuglé, le boss retrouve son nom. Les frappes déjà plantées tombent quand même. */
+    private void liftBlindness() {
+        blindnessLifted = true;
+        clearBlindness();
         if (nameHidden) showName(true);
     }
 
-    /** Délai avant le prochain Noir : raccourci à chaque phase déclenchée. */
+    private void endWindow() {
+        if (!blindnessLifted) liftBlindness();
+        blackoutState = BlackoutState.IDLE;
+        pendingStrikes.clear();
+        blinkQueue.clear();
+        nextBlackoutTick = tickCounter + blackoutCooldown(settings.blackout());
+        land();
+    }
+
+    /** Délai avant le prochain Noir : raccourci à chaque phase déclenchée, et tiré au hasard autour de sa valeur (pas de rythme à apprendre). */
     private long blackoutCooldown(CreakingSettings.Blackout cfg) {
-        return Math.max(20L, Math.round(cfg.cooldownTicks() * Math.pow(cfg.phaseCooldownFactor(), phasesStarted)));
+        double base = cfg.cooldownTicks() * Math.pow(cfg.phaseCooldownFactor(), phasesStarted);
+        long jitter = cfg.cooldownJitterTicks() > 0
+            ? ThreadLocalRandom.current().nextLong(-cfg.cooldownJitterTicks(), cfg.cooldownJitterTicks() + 1L) : 0L;
+        return Math.max(20L, Math.round(base) + jitter);
     }
 
     /** Un joueur aveuglé qui peut encore être pris pour cible : en vie, sur l'île, et toujours dans le noir (lait, soin...). */
@@ -363,43 +382,45 @@ public class CreakingBossController extends BossController implements HeartOwner
         return isTargetable(player) && (cfg.effects().isEmpty() || player.hasPotionEffect(cfg.effects().get(0).type()));
     }
 
-    /** Un joueur que le boss peut viser : en ligne, en vie, pas spectateur, dans le monde du boss et sur l'île. */
+    /** Un joueur que le boss peut viser : en ligne, en vie, ni spectateur, ni créatif, ni invisible (vanish), dans le monde du boss et sur l'île. */
     private boolean isTargetable(Player player) {
-        if (!player.isOnline() || player.isDead() || player.getGameMode() == GameMode.SPECTATOR) return false;
-        return player.getWorld().equals(boss.getWorld()) && island.isInside(player.getLocation());
+        return isFightable(player) && player.getWorld().equals(boss.getWorld()) && island.isInside(player.getLocation());
     }
 
+    /** Le boss se téléporte derrière le joueur suivant de la file et y plante un coup, qui tombera {@code strike-delay-ticks} plus tard. */
     private void blink(CreakingSettings.Blackout cfg) {
-        List<Player> candidates = new ArrayList<>();
-        for (UUID id : blinded) {
-            Player player = Bukkit.getPlayer(id);
-            if (player != null && isBlindTarget(player, cfg)) candidates.add(player);
-        }
-        if (candidates.isEmpty()) {
-            // Plus personne dans le noir : le Noir se termine plus tôt
-            endWindow(cfg);
-            return;
-        }
-        if (candidates.size() > 1) candidates.removeIf(p -> p.getUniqueId().equals(lastBlinkTarget));
-        Player victim = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+        UUID id = blinkQueue.remove(0);
         nextBlinkTick = tickCounter + cfg.blinkIntervalTicks();
-
+        Player victim = Bukkit.getPlayer(id);
+        // Un joueur qui a quitté l'île, est mort ou a retiré son aveuglement (lait...) perd ce coup
+        if (victim == null || !isBlindTarget(victim, cfg)) return;
         // Le craquement à l'arrivée est le seul indice : le joueur est aveugle
-        if (!blinkTo(victim, cfg.blinkDistance(), cfg)) return;
-        lastBlinkTarget = victim.getUniqueId();
-        strikeTarget = victim.getUniqueId();
-        strikeTick = tickCounter + cfg.strikeDelayTicks();
+        Location origin = blinkTo(victim, cfg.blinkDistance(), cfg);
+        if (origin == null) return;
+        pendingStrikes.add(new PendingStrike(id, origin, tickCounter + cfg.strikeDelayTicks()));
+    }
+
+    private void resolveDueStrikes(CreakingSettings.Blackout cfg) {
+        if (pendingStrikes.isEmpty()) return;
+        StrikeProfile profile = new StrikeProfile(cfg.strikeReach(), cfg.strikeDamage(), cfg.strikeTruePercent(), cfg.strikeKnockback());
+        Iterator<PendingStrike> due = pendingStrikes.iterator();
+        while (due.hasNext()) {
+            PendingStrike pending = due.next();
+            if (tickCounter < pending.tick()) continue;
+            due.remove();
+            strike(pending.victim(), pending.origin(), cfg, profile);
+        }
     }
 
     /**
      * Téléporte le boss sur sa proie (effets et craquement positionnel compris). Une proie en l'air n'a pas de sol : le boss
      * la rejoint à sa hauteur, sans gravité, jusqu'à sa frappe.
      *
-     * @return faux si aucun emplacement libre n'a été trouvé autour de la proie
+     * @return l'endroit où le boss est arrivé, ou nul si aucun emplacement libre n'a été trouvé autour de la proie
      */
-    private boolean blinkTo(Player victim, double distance, CreakingSettings.Blackout fx) {
+    private Location blinkTo(Player victim, double distance, CreakingSettings.Blackout fx) {
         Location spot = blinkSpot(victim, distance);
-        if (spot == null) return false;
+        if (spot == null) return null;
         fx.blinkFx().spawn(boss.getLocation().add(0, boss.getHeight() / 2, 0));
         boss.teleport(spot);
         boss.setVelocity(new Vector(0, 0, 0));
@@ -409,7 +430,7 @@ public class CreakingBossController extends BossController implements HeartOwner
         boss.setGravity(supported);
         fx.blinkFx().spawn(spot.clone().add(0, boss.getHeight() / 2, 0));
         fx.blinkSound().play(spot);
-        return true;
+        return spot;
     }
 
     /** Fin du vol stationnaire : le boss retrouve sa gravité et redescend au sol sous lui. */
@@ -524,38 +545,25 @@ public class CreakingBossController extends BossController implements HeartOwner
         return columnFree(world, blockX, feet, blockZ, height) ? new Location(world, blockX + 0.5, feet, blockZ + 0.5) : null;
     }
 
-    /** La frappe annoncée du Noir. */
-    private void resolveStrike(CreakingSettings.Blackout cfg) {
-        UUID id = strikeTarget;
-        strikeTick = -1;
-        strikeTarget = null;
-        strike(id, cfg, new StrikeProfile(cfg.strikeReach(), cfg.strikeDamage(), cfg.strikeTruePercent(), cfg.strikeKnockback()));
-    }
-
     /**
-     * Une frappe annoncée (Noir ou Sursaut) : elle porte si le joueur est resté à portée, sinon il l'a esquivée. Si le boss
-     * flottait à la hauteur de sa proie, il redescend ensuite au sol. Les sons et particules sont ceux du Noir.
+     * Une frappe annoncée (Noir ou Sursaut) : elle porte si le joueur est resté à portée de l'endroit d'où elle part
+     * ({@code origin}, là où le boss est arrivé), sinon il l'a esquivée. Les sons et particules sont ceux du Noir.
      */
-    private void strike(UUID id, CreakingSettings.Blackout fx, StrikeProfile profile) {
-        try {
-            Player victim = id == null ? null : Bukkit.getPlayer(id);
-            if (victim == null || !victim.isOnline() || victim.isDead() || !victim.getWorld().equals(boss.getWorld())) return;
+    private void strike(UUID id, Location origin, CreakingSettings.Blackout fx, StrikeProfile profile) {
+        Player victim = id == null ? null : Bukkit.getPlayer(id);
+        if (victim == null || !isFightable(victim) || !victim.getWorld().equals(origin.getWorld())) return;
 
-            Location origin = boss.getLocation();
-            if (victim.getLocation().distanceSquared(origin) > profile.reach() * profile.reach()) {
-                fx.dodgeSound().playFor(victim);
-                PlayerText.actionBar(victim, settings.texts().dodge());
-                return;
-            }
-            fx.strikeSound().play(origin);
-            fx.strikeFx().spawn(victim.getLocation().add(0, 1.0, 0));
-            hurt(victim, profile.damage(), profile.truePercent());
-            Vector push = victim.getLocation().toVector().subtract(origin.toVector()).setY(0);
-            if (!victim.isDead() && push.lengthSquared() > 1.0E-4) {
-                victim.setVelocity(push.normalize().multiply(profile.knockback()).setY(profile.knockback() * 0.4));
-            }
-        } finally {
-            land();
+        if (victim.getLocation().distanceSquared(origin) > profile.reach() * profile.reach()) {
+            fx.dodgeSound().playFor(victim);
+            PlayerText.actionBar(victim, settings.texts().dodge());
+            return;
+        }
+        fx.strikeSound().play(origin);
+        fx.strikeFx().spawn(victim.getLocation().add(0, 1.0, 0));
+        hurt(victim, profile.damage(), profile.truePercent());
+        Vector push = victim.getLocation().toVector().subtract(origin.toVector()).setY(0);
+        if (!victim.isDead() && push.lengthSquared() > 1.0E-4) {
+            victim.setVelocity(push.normalize().multiply(profile.knockback()).setY(profile.knockback() * 0.4));
         }
     }
 
@@ -570,43 +578,6 @@ public class CreakingBossController extends BossController implements HeartOwner
     }
 
     // ------------------------------------------------------------------ dégâts infligés aux joueurs
-
-    /**
-     * Frappe un joueur : d'abord un coup normal (armure, protections, totem... s'appliquent), puis une part de ses PV max
-     * retirée directement. L'équipement complet du serveur arrête presque tout coup normal ; cette part-là ne dépend ni de
-     * l'armure ni des cœurs d'absorption, elle suit les PV du joueur. Si elle suffit à le tuer, elle passe par un vrai coup
-     * (totem d'immortalité, mort et règles de l'île se déclenchent normalement).
-     */
-    private void hurt(Player victim, double baseDamage, double truePercent) {
-        if (baseDamage > 0.0) {
-            dealingDamage = true;
-            try {
-                victim.damage(baseDamage, boss);
-            } finally {
-                dealingDamage = false;
-            }
-        }
-        trueDamage(victim, truePercent);
-    }
-
-    private void trueDamage(Player victim, double percent) {
-        if (percent <= 0.0 || !victim.isOnline() || victim.isDead()) return;
-        GameMode mode = victim.getGameMode();
-        if (mode == GameMode.CREATIVE || mode == GameMode.SPECTATOR) return;
-        AttributeInstance maxHealthAttribute = victim.getAttribute(Attribute.MAX_HEALTH);
-        double amount = (maxHealthAttribute != null ? maxHealthAttribute.getValue() : 20.0) * percent / 100.0;
-        double health = victim.getHealth();
-        if (amount < health) {
-            victim.setHealth(health - amount);
-            return;
-        }
-        dealingDamage = true;
-        try {
-            victim.damage(1_000_000.0, boss);
-        } finally {
-            dealingDamage = false;
-        }
-    }
 
     /**
      * Coup de mêlée vanille du boss sur un joueur (appelé depuis l'événement de dégâts) : le bonus de dégâts réels part
@@ -626,13 +597,6 @@ public class CreakingBossController extends BossController implements HeartOwner
         if (attacker != null) damageDealt.merge(attacker.getUniqueId(), event.getFinalDamage(), Double::sum);
     }
 
-    private static Player attackerOf(EntityDamageEvent event) {
-        if (!(event instanceof EntityDamageByEntityEvent byEntity)) return null;
-        Entity damager = byEntity.getDamager();
-        if (damager instanceof Player player) return player;
-        return damager instanceof Projectile projectile && projectile.getShooter() instanceof Player shooter ? shooter : null;
-    }
-
     private void tickSursaut() {
         CreakingSettings.Sursaut cfg = settings.sursaut();
         if (!cfg.enabled()) {
@@ -646,12 +610,12 @@ public class CreakingBossController extends BossController implements HeartOwner
                 if (tickCounter >= sursautWarningEnd) {
                     sursautBlink(cfg);
                 } else if (tickCounter % 4 == 0) {
-                    settings.blackout().telegraphFx().spawn(boss.getLocation().add(0, boss.getHeight() / 2, 0));
+                    settings.blackout().blinkFx().spawn(boss.getLocation().add(0, boss.getHeight() / 2, 0));
                 }
             }
             case STRIKING -> {
                 if (tickCounter >= sursautStrikeTick) {
-                    strike(sursautTarget, settings.blackout(),
+                    strike(sursautTarget, boss.getLocation(), settings.blackout(),
                         new StrikeProfile(cfg.strikeReach(), cfg.strikeDamage(), cfg.strikeTruePercent(), cfg.strikeKnockback()));
                     endSursaut(cfg);
                 }
@@ -722,7 +686,7 @@ public class CreakingBossController extends BossController implements HeartOwner
 
     private void sursautBlink(CreakingSettings.Sursaut cfg) {
         Player victim = sursautTarget == null ? null : Bukkit.getPlayer(sursautTarget);
-        if (victim == null || !isTargetable(victim) || !blinkTo(victim, cfg.blinkDistance(), settings.blackout())) {
+        if (victim == null || !isTargetable(victim) || blinkTo(victim, cfg.blinkDistance(), settings.blackout()) == null) {
             endSursaut(cfg);
             return;
         }
@@ -755,8 +719,11 @@ public class CreakingBossController extends BossController implements HeartOwner
     private void startPhase() {
         CreakingSettings.Phase phase = settings.phases().get(phasesStarted);
         phasesStarted++;
-        heartsLeft = phase.hearts();
-        heartsToPlace = phase.hearts();
+        // Plus il y a de combattants, plus il y a de cœurs à briser (au plus le double de ceux de la phase)
+        int fighters = playersWithin(settings.hearts().guideRange()).size();
+        int extra = (int) Math.round(Math.max(0, fighters - 1) * settings.heartsPerExtraPlayer());
+        heartsLeft = phase.hearts() + Math.min(extra, phase.hearts());
+        heartsToPlace = heartsLeft;
         placementRetries = 0;
         tryPlaceHearts();
         persistState();
@@ -808,6 +775,8 @@ public class CreakingBossController extends BossController implements HeartOwner
 
     @Override
     public void onHeartDestroyed(Player player) {
+        // Un cœur brisé compte comme des dégâts infligés au boss : pendant une phase on ne peut pas le blesser autrement
+        addContribution(player.getUniqueId(), maxHealth * settings.hearts().creditPercent() / 100.0);
         if (heartsLeft > 0) heartsLeft--;
         persistState();
         if (heartsLeft > 0) {
@@ -904,6 +873,7 @@ public class CreakingBossController extends BossController implements HeartOwner
      *
      * @return vrai si le coup doit être annulé
      */
+    @Override
     public boolean absorbDamage(EntityDamageEvent event) {
         EntityDamageEvent.DamageCause cause = event.getCause();
         // Le vide et /kill passent toujours : un boss ne doit jamais devenir impossible à retirer
@@ -914,16 +884,7 @@ public class CreakingBossController extends BossController implements HeartOwner
             return true;
         }
 
-        double cap = maxHealth * settings.maxHitPercent() / 100.0;
-        double finalDamage = event.getFinalDamage();
-        if (cap > 0.0 && finalDamage > cap) {
-            // Chaque modificateur (base, armure, résistance...) est mis à l'échelle : setDamage(double) ne recalcule pas l'armure
-            // proportionnellement et laisserait un total négatif, c'est-à-dire un soin
-            double scale = cap / finalDamage;
-            for (EntityDamageEvent.DamageModifier modifier : EntityDamageEvent.DamageModifier.values()) {
-                if (event.isApplicable(modifier)) event.setDamage(modifier, event.getDamage(modifier) * scale);
-            }
-        }
+        limitHit(event, settings.maxHitPercent(), 1.0);
 
         if (phasesStarted < settings.phases().size()) {
             double thresholdHealth = maxHealth * settings.phases().get(phasesStarted).healthPercent() / 100.0;
@@ -960,17 +921,6 @@ public class CreakingBossController extends BossController implements HeartOwner
         CreakingSettings.Shockwave shockwave = settings.shockwave();
         if (!shielded) return shockwave.cooldownTicks();
         return Math.max(1L, Math.round(shockwave.cooldownTicks() / shockwave.shieldFrequencyFactor()));
-    }
-
-    /** Joueurs vivants de l'île dans un rayon autour du boss. */
-    private List<Player> playersWithin(double radius) {
-        Location origin = boss.getLocation();
-        double radiusSquared = radius * radius;
-        return boss.getWorld().getNearbyPlayers(origin, radius,
-                p -> p.getGameMode() != GameMode.SPECTATOR && !p.isDead() && island.isInside(p.getLocation()))
-            .stream()
-            .filter(p -> p.getLocation().distanceSquared(origin) <= radiusSquared)
-            .toList();
     }
 
     /** Onde de choc : dégâts et recul pour les joueurs proches. Renvoie faux (sans consommer le délai) si personne n'est à portée. */

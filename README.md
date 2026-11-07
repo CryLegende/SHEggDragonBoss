@@ -21,10 +21,10 @@ Chaque boss se lance par un rituel : un clic droit sur un bloc avec un objet (Sh
 | Bloc du rituel | `DRAGON_EGG` | `CREAKING_HEART` |
 | Objet requis | 15 `ECHO_SHARD` | 10 `RESIN_BRICK` |
 | Compte à rebours | 10 s | 10 s |
-| Boss | Phantom « Jeune Ender Dragon », sans IA, qui poursuit les joueurs de l'île | Creaking à l'IA vanilla (il se fige quand on le regarde) |
-| Combat | Frappe de près et boules de feu de loin | Frappe vanilla, onde de choc, résine collante, le Noir (cécité, téléportations) et le Sursaut (se retourne contre qui le frappe sur place) |
-| Particularité | | Invulnérable par phases (66 % puis 33 % des PV) tant qu'il reste des cœurs à détruire à la main autour de lui |
-| Récompenses | 1 membrane de phantom, 15 000 XP, commande `rc dragonegg-rewards {player}` | 20 000 XP, commande `rc creaking-rewards {player}` |
+| Boss | Phantom « Jeune Ender Dragon », sans IA, qui tourne autour des joueurs de l'île | Creaking à l'IA vanilla (il se fige quand on le regarde) |
+| Combat | Boules de feu de loin, morsure de près, plongeon sur un joueur, rugissement à chaque phase | Frappe vanilla, onde de choc, résine collante, le Noir (éclairs d'obscurité, téléportations, un coup par combattant) et le Sursaut (se retourne contre qui le frappe sur place) |
+| Particularité | Phases à 75 %, 50 % et 25 % des PV : rugissement invulnérable puis souffle qui repousse ; plus rapide à chaque phase ; étourdi et plus vulnérable après un plongeon | Invulnérable par phases (80 %, 60 %, 40 % puis 20 % des PV) tant qu'il reste des cœurs à détruire à la main autour de lui ; plus de cœurs avec plus de combattants |
+| Récompenses | 15 000 XP partagés, 1 tirage `rc dragonegg-rewards` par participant, +1 pour le meilleur combattant, 1 membrane de phantom | 20 000 XP partagés, 1 clé rare garantie et 2 tirages `rc creaking-rewards` par participant, +1 tirage pour le meilleur combattant |
 
 Règles communes :
 
@@ -32,19 +32,30 @@ Règles communes :
 - Le rituel demande le privilège d'île `EGG_HATCH` (SuperiorSkyblock2), le même pour les deux boss.
 - Les PV de chaque boss grandissent avec le niveau de l'île et le nombre de membres.
 - Un boss qui disparaît avec son chunk est mis en sommeil puis réveillé avec ses PV ; après un redémarrage, il est repris avec sa phase.
-- À la mort : barre de boss retirée, drops vanilla supprimés, XP donnée au tueur, objets et commandes console de la configuration.
+- Un boss ne vise jamais un joueur invisible (vanish : métadonnée `vanished` de PremiumVanish, SuperVanish ou EssentialsX), en créatif ou en spectateur : ni téléportation, ni Noir, ni attaque.
+- **Plafond par coup.** Aucun coup ne retire plus de `max-hit-percent` % des PV max du boss : c'est ce plafond qui fixe la durée minimale du combat, quelle que soit la force du coup.
+- **Mort en scène.** Le coup fatal est retenu : le boss tremble, s'élève ou s'affaisse en tournant, des particules l'entourent en spirale, puis un final éclate (explosion, éclats, anneaux qui s'élargissent, colonne de lumière) et le plugin porte le coup de grâce. Le vide et `/kill` passent sans scène. Réglable dans `bosses.<boss>.death`.
+- **Participants.** Chaque coup retire des PV au boss et les compte à son auteur ; un cœur brisé compte `hearts.credit-percent` % des PV max. Un joueur qui atteint `min-contribution-percent` % des PV max est un participant. À la mort : titre et classement dans le chat, XP partagée au prorata, `guaranteed-commands` une fois et `participant-commands` `rolls` fois pour chaque participant, `mvp-commands` une fois pour le meilleur, `commands` une fois (`{player}` = le coup fatal), objets lâchés sur place. Une commande par ligne (pas de `;`).
+
+### Le combat du dragon
+
+Un Phantom sans IA que le plugin fait voler.
+
+- **Vol en cercle.** Il tourne autour du joueur le plus proche (`flight`) et crache une salve de boules de feu (`ranged-attack`) sur un joueur tiré au hasard ; il mord le joueur qui s'approche trop.
+- **Plongeon.** Il se cabre au-dessus d'un joueur tiré au hasard, fixe l'endroit visé (un cercle de flammes au sol le montre, la barre d'action du joueur le prévient), puis fond dessus. L'impact blesse et repousse tout ce qui est autour. Le dragon reste ensuite étourdi (`stun-ticks`) et encaisse `stun-damage-multiplier` fois plus.
+- **Rugissement.** À chaque seuil de `phases` il est invulnérable `roar.duration-ticks` ticks, se cabre en tremblant, puis un souffle blesse et repousse tout autour. Il est ensuite plus rapide (`phase-speed-bonus`), enchaîne ses attaques plus vite (`phase-speedup`) et tire une boule de feu de plus (`fireballs-per-phase`). La barre de boss rougit à la deuxième phase.
+- La phase franchie est écrite sur l'entité : un redémarrage reprend le combat là où il en était.
 
 ### Le combat du Creaking
 
 Le Creaking vanilla se fige tant qu'un joueur le regarde ; le combat joue sur cette règle, face à des joueurs en équipement complet.
 
-- **Le Noir.** Régulièrement, le boss annonce le noir (titre, battement de cœur), puis aveugle (cécité et obscurité) les joueurs proches pendant quelques secondes. Un joueur aveuglé ne le fige plus : le boss se téléporte à deux blocs derrière lui, un craquement positionnel est le seul indice, et il frappe une fraction de seconde plus tard. On esquive en s'éloignant au-delà de la portée de la frappe, ou en retirant l'aveuglement (lait) : un joueur qui voit n'est plus pris pour cible. Le délai raccourcit à chaque phase.
+- **Le Noir.** Un éclair d'obscurité de moins d'une seconde, sans annonce, qui revient toutes les quelques secondes (`cooldown-ticks` plus ou moins `cooldown-jitter-ticks`, plus court à chaque phase). Il aveugle (cécité et obscurité) les joueurs proches ; un joueur aveuglé ne fige plus le boss : le boss se téléporte à deux blocs derrière chacun d'eux et plante un coup par combattant (`hits-per-player`, jamais plus de `max-hits`), chacun sur un joueur différent tant que c'est possible. Un craquement positionnel est le seul indice ; le coup tombe `strike-delay-ticks` après l'arrivée du boss. On esquive en s'éloignant au-delà de la portée du coup de l'endroit où le boss est arrivé, ou en retirant l'aveuglement (lait) : un joueur qui voit n'est plus pris pour cible.
 - **Le nom disparaît pendant le Noir.** Même aveuglé, on verrait le nom du boss à travers le noir : il est retiré le temps de l'aveuglement et revient ensuite (`hide-name`).
 - **Le Sursaut.** Le regard fige le boss, mais un boss frappé sur place sans répit finit par réagir : quand il est resté immobile `pinned-ticks` ticks en recevant des coups, il se téléporte derrière celui qui l'a le plus frappé et le frappe une fraction de seconde plus tard, comme au Noir (même esquive, avertissement dans la barre d'action de la cible). Rien ne compte pendant le Noir ni pendant une phase.
 - **Joueurs en vol.** Une proie dont les `airborne-clearance` blocs sous les pieds sont vides (vol, élytres, grand saut) n'échappe ni au Noir ni au Sursaut : le boss la rejoint à sa hauteur, sans gravité, le temps de sa frappe, puis redescend au sol.
 - **Dégâts réels.** Armure, protections et cœurs d'absorption arrêtent presque tout coup normal d'un équipement complet. La frappe du Noir, l'onde de choc et la mêlée retirent donc en plus une part des PV max du joueur, directement. Un coup mortel passe par un vrai coup (totem d'immortalité, règles de l'île).
-- **Plafond par coup.** Aucun coup ne retire plus de `max-hit-percent` % des PV max du boss : c'est ce plafond qui fixe la durée minimale du combat, quelle que soit la force du coup.
-- **Phases et cœurs.** Sous un seuil de PV, le boss devient invulnérable, la barre de boss change de titre et de couleur et affiche les cœurs restants. Des blocs `CREAKING_HEART` non naturels apparaissent sur des blocs d'air de l'île, à quelques blocs de lui.
+- **Phases et cœurs.** Sous un seuil de PV, le boss devient invulnérable, la barre de boss change de titre et de couleur et affiche les cœurs restants. Des cœurs apparaissent sur des blocs d'air de l'île, à quelques blocs de lui ; chaque combattant au-delà du premier en ajoute `hearts-per-extra-player` (au plus le double des cœurs de la phase).
 - **Briser un cœur.** Les cœurs sont des affichages lumineux (contour visible à travers les blocs) avec une zone de frappe, jamais de vrais blocs : on les frappe en clic gauche (maintenu ou répété), on ne peut pas les miner, et SuperiorSkyblock2 ne les compte pas dans le niveau de l'île. Un titre, un message, une barre d'action de progression à chaque coup, une colonne de particules au-dessus de chaque cœur et une boussole (direction et distance du cœur le plus proche, lisible même aveuglé) l'expliquent. Aucune protection d'île, explosion, piston ou créature ne les atteint.
 - Quand le dernier cœur tombe, le boss redevient vulnérable. S'il meurt ou disparaît, tous les cœurs restants sont supprimés et l'aveuglement retiré ; les entités de cœur laissées par un arrêt brutal sont retirées au chargement de leur chunk.
 - Le boss ne quitte jamais l'île et ne tombe jamais dans le vide : hors de l'île ou trop bas, il est ramené au centre.
