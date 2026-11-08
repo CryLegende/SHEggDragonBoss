@@ -553,12 +553,9 @@ public class ConfigManager {
         }
         return new Rewards(
             in.integer(p + "xp-reward", 0),
-            in.decimal(p + "min-contribution-percent", 0.0, 100.0),
             in.integer(p + "rolls", 0),
-            List.copyOf(plugin.getConfig().getStringList(p + "guaranteed-commands")),
-            List.copyOf(plugin.getConfig().getStringList(p + "participant-commands")),
-            List.copyOf(plugin.getConfig().getStringList(p + "mvp-commands")),
             List.copyOf(plugin.getConfig().getStringList(p + "commands")),
+            List.copyOf(plugin.getConfig().getStringList(p + "roll-commands")),
             List.copyOf(items));
     }
 

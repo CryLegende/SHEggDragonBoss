@@ -153,7 +153,6 @@ public class PlayerListener implements Listener {
         Player killer = finisher != null ? finisher : entity.getKiller();
         Map<UUID, Double> contributions = controller != null ? controller.contributions() : Map.of();
         Collection<Player> audience = controller != null ? controller.audience() : List.of();
-        double maxHealth = controller != null ? controller.maxHealth() : entity.getHealth();
         boolean stagedFinale = controller != null && controller.finaleDone();
 
         bossManager.handleBossDeath(entity);
@@ -176,7 +175,7 @@ public class PlayerListener implements Listener {
         event.getDrops().clear();
         event.setDroppedExp(0);
 
-        RewardManager.distribute(plugin, type, settings, contributions, maxHealth, killer, island, loc, audience);
+        RewardManager.distribute(plugin, type, settings, contributions, killer, island, loc, audience);
     }
 
     // Un boss sauvegardé avec son chunk n'a plus de contrôleur après un redémarrage ou un déchargement : on le reprend
@@ -211,7 +210,7 @@ public class PlayerListener implements Listener {
         BossType type = BossType.of(event.getEntity().getPersistentDataContainer());
         if (type == null) return;
 
-        // Les PV réellement retirés au boss sont comptés à celui qui les a infligés (récompenses des participants)
+        // Les PV réellement retirés au boss sont comptés à celui qui les a infligés (classement de fin de combat)
         BossController controller = bossManager.getController(event.getEntity().getUniqueId());
         if (controller != null && !controller.isDying()) controller.recordDamage(event);
 

@@ -10,7 +10,7 @@
 #              tant qu'il reste des cœurs à détruire autour de lui.
 # Une île n'a jamais qu'un seul boss (n'importe lequel) ou rituel en cours à la fois.
 # Les deux boss : ne visent jamais les joueurs invisibles (vanish), en créatif ou en spectateur ; meurent en plusieurs temps
-# (section death) ; récompensent tous les participants, pas seulement celui qui porte le coup fatal (section rewards).
+# (section death) ; récompensent celui qui porte le coup fatal, et lui seul (section rewards).
 #
 # Commandes :
 #   /sheggdragonboss reload                                       Recharge config.yml et messages.yml.
@@ -438,26 +438,19 @@ bosses:
         pitch: 1.0
 
     # --- RÉCOMPENSES ---
-    # Elles vont à tous les PARTICIPANTS, pas seulement à celui qui porte le coup fatal. Un participant est un joueur dont la
-    # contribution (PV retirés au boss) atteint min-contribution-percent % des PV max du boss.
+    # Elles vont à celui qui porte le coup fatal, et à lui seul. S'il s'est déconnecté pendant la mort en scène ou si le boss
+    # tombe d'une autre cause, le joueur qui a le plus infligé au boss le remplace.
     rewards:
-      # Points d'expérience, en une seule réserve partagée entre les participants au prorata de leur contribution.
+      # Points d'expérience donnés au tueur.
       xp-reward: 15000
-      min-contribution-percent: 2.0
-      # Nombre de fois que chaque participant lance participant-commands.
-      rolls: 1
-      # Lancées une fois pour chaque participant. Placeholders : {player} le participant, {island} le nom de l'île (sinon de
-      # son propriétaire), {world}, {x}, {y}, {z}. Pas de ';' : une commande par ligne.
-      guaranteed-commands: []
-      # Lancées `rolls` fois pour chaque participant (le tirage au sort).
-      participant-commands:
-        - "rc dragonegg-rewards {player}"
-      # Lancées une fois pour le participant qui a le plus contribué (le meilleur combattant).
-      mvp-commands:
-        - "rc dragonegg-rewards {player}"
-        - "sm {player} &7&l« &5&lSH &8&l» &7Meilleur combattant : un &5tirage bonus &7pour vous !"
-      # Lancées une fois, à la mort ({player} = celui qui a porté le coup fatal ; ignorées s'il n'y en a pas).
+      # Nombre de fois que le tueur lance roll-commands.
+      rolls: 2
+      # Lancées une fois pour le tueur. Placeholders : {player} le tueur, {island} le nom de l'île (sinon de son propriétaire),
+      # {world}, {x}, {y}, {z}. Pas de ';' : une commande par ligne.
       commands: []
+      # Lancées `rolls` fois pour le tueur (le tirage au sort).
+      roll-commands:
+        - "rc dragonegg-rewards {player}"
       # Objets lâchés à la mort du boss. Pour n'en lâcher aucun, écrire 'items: []'.
       # Exemple d'objet personnalisé :
       #   - material: "DIAMOND"
@@ -910,29 +903,21 @@ bosses:
         pitch: 1.0
 
     # --- RÉCOMPENSES ---
-    # Elles vont à tous les PARTICIPANTS, pas seulement à celui qui porte le coup fatal. Un participant est un joueur dont la
-    # contribution (PV retirés au boss, et chaque cœur brisé pour hearts.credit-percent %) atteint min-contribution-percent %
-    # des PV max du boss.
+    # Elles vont à celui qui porte le coup fatal, et à lui seul. S'il s'est déconnecté pendant la mort en scène ou si le boss
+    # tombe d'une autre cause, le joueur qui a le plus infligé au boss (cœurs brisés compris) le remplace.
     rewards:
-      # Points d'expérience, en une seule réserve partagée entre les participants au prorata de leur contribution.
+      # Points d'expérience donnés au tueur.
       xp-reward: 20000
-      min-contribution-percent: 2.0
-      # Nombre de fois que chaque participant lance participant-commands.
-      rolls: 2
-      # Lancées une fois pour chaque participant : un plancher, personne ne repart les mains vides. Placeholders : {player} le
-      # participant, {island} le nom de l'île (sinon de son propriétaire), {world}, {x}, {y}, {z}. Pas de ';' : une commande par ligne.
-      guaranteed-commands:
+      # Nombre de fois que le tueur lance roll-commands.
+      rolls: 3
+      # Lancées une fois pour le tueur : un plancher garanti. Placeholders : {player} le tueur, {island} le nom de l'île (sinon de
+      # son propriétaire), {world}, {x}, {y}, {z}. Pas de ';' : une commande par ligne.
+      commands:
         - "shcrates givekey {player} rare 1 physical"
-        - "sm {player} &7&l« &a&lSH &8&l» &7Vous venez de recevoir &c1 &6Clé Rare &7pour avoir combattu le Boss &2&lCreaking&7."
-      # Lancées `rolls` fois pour chaque participant (le tirage au sort).
-      participant-commands:
+        - "sm {player} &7&l« &a&lSH &8&l» &7Vous venez de recevoir &c1 &6Clé Rare &7pour avoir vaincu le Boss &2&lCreaking&7."
+      # Lancées `rolls` fois pour le tueur (le tirage au sort).
+      roll-commands:
         - "rc creaking-rewards {player}"
-      # Lancées une fois pour le participant qui a le plus contribué (le meilleur combattant).
-      mvp-commands:
-        - "rc creaking-rewards {player}"
-        - "sm {player} &7&l« &6&lSH &8&l» &7Meilleur combattant : un &6tirage bonus &7pour vous !"
-      # Lancées une fois, à la mort ({player} = celui qui a porté le coup fatal ; ignorées s'il n'y en a pas).
-      commands: []
       # Objets lâchés à la mort (même format que le dragon). Aucun par défaut : les récompenses passent par les commandes.
       items: []
 

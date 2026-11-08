@@ -24,7 +24,7 @@ Chaque boss se lance par un rituel : un clic droit sur un bloc avec un objet (Sh
 | Boss | Phantom « Jeune Ender Dragon », sans IA, qui tourne autour des joueurs de l'île | Creaking à l'IA vanilla (il se fige quand on le regarde) |
 | Combat | Boules de feu de loin, morsure de près, plongeon sur un joueur, rugissement à chaque phase | Frappe vanilla, onde de choc, résine collante, le Noir (éclairs d'obscurité, téléportations, un coup par combattant) et le Sursaut (se retourne contre qui le frappe sur place) |
 | Particularité | Phases à 75 %, 50 % et 25 % des PV : rugissement invulnérable puis souffle qui repousse ; plus rapide à chaque phase ; étourdi et plus vulnérable après un plongeon | Invulnérable par phases (80 %, 60 %, 40 % puis 20 % des PV) tant qu'il reste des cœurs à détruire à la main autour de lui ; plus de cœurs avec plus de combattants |
-| Récompenses | 15 000 XP partagés, 1 tirage `rc dragonegg-rewards` par participant, +1 pour le meilleur combattant, 1 membrane de phantom | 20 000 XP partagés, 1 clé rare garantie et 2 tirages `rc creaking-rewards` par participant, +1 tirage pour le meilleur combattant |
+| Récompenses (au tueur seul) | 15 000 XP, 2 tirages `rc dragonegg-rewards`, 1 membrane de phantom | 20 000 XP, 1 clé rare garantie et 3 tirages `rc creaking-rewards` |
 
 Règles communes :
 
@@ -35,7 +35,7 @@ Règles communes :
 - Un boss ne vise jamais un joueur invisible (vanish : métadonnée `vanished` de PremiumVanish, SuperVanish ou EssentialsX), en créatif ou en spectateur : ni téléportation, ni Noir, ni attaque.
 - **Plafond par coup.** Aucun coup ne retire plus de `max-hit-percent` % des PV max du boss : c'est ce plafond qui fixe la durée minimale du combat, quelle que soit la force du coup.
 - **Mort en scène.** Le coup fatal est retenu : le boss tremble, s'élève ou s'affaisse en tournant, des particules l'entourent en spirale, puis un final éclate (explosion, éclats, anneaux qui s'élargissent, colonne de lumière) et le plugin porte le coup de grâce. Le vide et `/kill` passent sans scène. Réglable dans `bosses.<boss>.death`.
-- **Participants.** Chaque coup retire des PV au boss et les compte à son auteur ; un cœur brisé compte `hearts.credit-percent` % des PV max. Un joueur qui atteint `min-contribution-percent` % des PV max est un participant. À la mort : titre et classement dans le chat, XP partagée au prorata, `guaranteed-commands` une fois et `participant-commands` `rolls` fois pour chaque participant, `mvp-commands` une fois pour le meilleur, `commands` une fois (`{player}` = le coup fatal), objets lâchés sur place. Une commande par ligne (pas de `;`).
+- **Récompenses.** Elles vont au tueur seul (celui qui porte le coup fatal). À la mort : titre et classement des combattants dans le chat (qui a fait quoi, en %, avec le tueur en dernière ligne), puis pour le tueur l'XP (`xp-reward`), `commands` une fois et `roll-commands` `rolls` fois (`{player}` = le tueur), et les objets lâchés sur place. Chaque coup retire des PV au boss et les compte à son auteur (un cœur brisé compte `hearts.credit-percent` % des PV max) ; ce décompte ne sert qu'au classement et au remplacement du tueur : s'il s'est déconnecté pendant la mort en scène ou si le boss tombe d'une autre cause, le joueur qui a le plus infligé au boss reçoit les récompenses à sa place. Une commande par ligne (pas de `;`).
 
 ### Le combat du dragon
 

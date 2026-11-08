@@ -116,6 +116,8 @@ bosses:
     death-subtitle: "&7Le &5Jeune Ender Dragon &7s'est effondré"
     death-summary-header: "&7&l« &5&lSH &8&l» &7Le &5%name% &7est tombé ! &dMeilleurs combattants &7:"
     death-summary-line: "  &8#%rank% &d%player% &8- &f%percent%% &7du combat"
+    # Dernière ligne du classement : celui qui reçoit les récompenses (coup fatal). Placeholder : %player%.
+    death-killer-line: "  &7Coup fatal et récompenses &8» &d%player%"
 
   # Boss n°2 : le Creaking.
   # Placeholders du combat : %hearts% cœurs restants, %phase% phase en cours, %phases% nombre de phases,
@@ -153,6 +155,8 @@ bosses:
     death-subtitle: "&7Le silence retombe sur l'île"
     death-summary-header: "&7&l« &#FF7F11&lSH &8&l» &7Le &#FF7F11Creaking &7est tombé ! &6Meilleurs combattants &7:"
     death-summary-line: "  &8#%rank% &6%player% &8- &f%percent%% &7du combat"
+    # Dernière ligne du classement : celui qui reçoit les récompenses (coup fatal). Placeholder : %player%.
+    death-killer-line: "  &7Coup fatal et récompenses &8» &6%player%"
     # Barre d'action du joueur qui esquive la frappe du boss.
     dodge: "&a&lEsquivé !"
     # Barre d'action du joueur que le boss vise après avoir été frappé trop longtemps sur place (Sursaut). Le boss arrive
@@ -188,7 +192,7 @@ items:
 # ----------------------------------------------------------------#
 # Une ligne par évènement, écrite dans le fichier boss de SHLogs (qui ajoute la date). Pas de codes couleur.
 # Placeholders : %island% (voir island-of), %health% et %max% PV, %phase% %phases% %hearts% pour le Creaking (%phase% %phases%
-# pour le dragon), %killer% le tueur, %player% et %seconds% pour le Sursaut, %participants% %mvp% %names% pour les récompenses.
+# pour le dragon), %killer% le tueur, %player% et %seconds% pour le Sursaut, %names% (les combattants) pour les récompenses (%killer% = celui qui les reçoit).
 journal:
   island-of: "l'île de %owner%"
   island-unknown: "une île inconnue"
@@ -198,7 +202,7 @@ journal:
   dragon-restored: "Un boss a été restauré sur %island% (Vie: %health%/%max%, rage %phase%/%phases%)."
   dragon-phase-start: "Boss sur %island% : il rugit, rage %phase%/%phases% (Vie: %health%/%max%)."
   dragon-killed: "Le boss sur %island% a été tué par %killer%."
-  rewards: "Récompenses du boss sur %island% : %participants% participant(s), meilleur combattant %mvp% (%names%)."
+  rewards: "Récompenses du boss sur %island% : données à %killer% (combattants : %names%)."
   creaking-spawned: "Un boss Creaking est apparu sur %island% (Vie: %health%/%max%)."
   creaking-woken: "Un boss Creaking dormant a été réveillé sur %island% (Vie: %health%/%max%, phase %phase%/%phases%, %hearts% cœur(s) à détruire)."
   creaking-restored: "Un boss Creaking a été restauré sur %island% après un redémarrage (phase %phase%/%phases%, %hearts% cœur(s) à détruire)."
