@@ -31,13 +31,13 @@ import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -80,7 +80,7 @@ public abstract class BossController extends BukkitRunnable {
     private BarStyle shownStyle;
 
     /** Ce que chaque joueur a fait au boss (dégâts réellement infligés, cœurs brisés), en PV du boss. */
-    private final Map<UUID, Double> contributions = new HashMap<>();
+    private final Map<UUID, Double> contributions = new ConcurrentHashMap<>();
 
     private boolean dying;
     private boolean finishing;

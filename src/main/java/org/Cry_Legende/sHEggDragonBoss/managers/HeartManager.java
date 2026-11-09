@@ -26,12 +26,12 @@ import org.bukkit.util.Transformation;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -69,10 +69,10 @@ public class HeartManager {
     private final SHEggDragonBoss plugin;
     private final NamespacedKey markerKey;
     /** Cœurs posés, par identifiant de leur zone de frappe. */
-    private final Map<UUID, Heart> hearts = new HashMap<>();
-    private final Map<UUID, Long> lastHitNanos = new HashMap<>();
+    private final Map<UUID, Heart> hearts = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastHitNanos = new ConcurrentHashMap<>();
     /** Joueurs qui ont déjà reçu l'explication « clic gauche répété » pendant ce combat. */
-    private final Set<UUID> hinted = new HashSet<>();
+    private final Set<UUID> hinted = ConcurrentHashMap.newKeySet();
 
     public HeartManager(SHEggDragonBoss plugin) {
         this.plugin = plugin;

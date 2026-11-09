@@ -27,13 +27,13 @@ import org.bukkit.util.Vector;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -120,7 +120,7 @@ public class CreakingBossController extends BossController implements HeartOwner
     private Location pinnedAnchor;
     private long lastHitTick = Long.MIN_VALUE / 2;
     /** Dégâts reçus de chaque joueur depuis le dernier Sursaut : le plus gros contributeur devient la cible. */
-    private final Map<UUID, Double> damageDealt = new HashMap<>();
+    private final Map<UUID, Double> damageDealt = new ConcurrentHashMap<>();
     /** Vrai tant que le boss flotte, sans gravité, à la hauteur d'une proie qui vole, en attendant sa frappe. */
     private boolean hovering;
     private boolean nameHidden;

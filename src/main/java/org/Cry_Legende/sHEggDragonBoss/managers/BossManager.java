@@ -249,11 +249,16 @@ public class BossManager {
     public void handleBossDeath(LivingEntity boss) {
         BossController controller = activeBosses.remove(boss.getUniqueId());
         if (controller != null) {
-            if (!controller.isCancelled()) {
-                controller.cancel();
-            }
             dormantBosses.remove(controller.getIsland().getUniqueId());
-            saveData();
+            // La mort peut être traitée sur le thread du monde : l'arrêt du contrôleur et l'écriture du fichier passent par le thread principal
+            Runnable cleanup = () -> {
+                if (!controller.isCancelled()) {
+                    controller.cancel();
+                }
+                saveData();
+            };
+            if (plugin.getServer().isPrimaryThread()) cleanup.run();
+            else plugin.getServer().getScheduler().runTask(plugin, cleanup);
         }
     }
 

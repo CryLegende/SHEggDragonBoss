@@ -58,11 +58,16 @@ public final class RewardManager {
             "names", ranking.isEmpty() ? "-" : String.join(", ", ranking.stream().map(r -> r.player().getName()).toList())));
 
         if (winner != null) {
-            if (rewards.xp() > 0) winner.giveExp(rewards.xp());
-            for (String command : rewards.commands()) dispatch(plugin, command, winner, island, loc);
-            for (int roll = 0; roll < rewards.rolls(); roll++) {
-                for (String command : rewards.rollCommands()) dispatch(plugin, command, winner, island, loc);
-            }
+            // La mort peut être traitée sur le thread du monde : l'XP du joueur et les commandes console passent par le thread principal
+            Runnable payout = () -> {
+                if (rewards.xp() > 0) winner.giveExp(rewards.xp());
+                for (String command : rewards.commands()) dispatch(plugin, command, winner, island, loc);
+                for (int roll = 0; roll < rewards.rolls(); roll++) {
+                    for (String command : rewards.rollCommands()) dispatch(plugin, command, winner, island, loc);
+                }
+            };
+            if (Bukkit.isPrimaryThread()) payout.run();
+            else Bukkit.getScheduler().runTask(plugin, payout);
         }
 
         for (Rewards.ItemReward reward : rewards.items()) {

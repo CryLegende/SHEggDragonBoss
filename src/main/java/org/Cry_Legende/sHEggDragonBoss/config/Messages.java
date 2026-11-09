@@ -13,9 +13,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,7 +31,7 @@ public final class Messages {
     private final JavaPlugin plugin;
     private final File file;
     private YamlConfiguration config = new YamlConfiguration();
-    private final Set<String> warned = new HashSet<>();
+    private final Set<String> warned = ConcurrentHashMap.newKeySet();
 
     public Messages(JavaPlugin plugin) {
         this.plugin = plugin;
