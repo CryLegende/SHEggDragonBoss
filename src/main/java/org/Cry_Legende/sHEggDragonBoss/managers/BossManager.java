@@ -257,7 +257,7 @@ public class BossManager {
                 }
                 saveData();
             };
-            if (plugin.getServer().isPrimaryThread()) cleanup.run();
+            if (SHEggDragonBoss.onServerThread()) cleanup.run();
             else plugin.getServer().getScheduler().runTask(plugin, cleanup);
         }
     }

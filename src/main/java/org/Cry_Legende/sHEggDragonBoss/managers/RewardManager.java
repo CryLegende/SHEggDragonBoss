@@ -66,7 +66,7 @@ public final class RewardManager {
                     for (String command : rewards.rollCommands()) dispatch(plugin, command, winner, island, loc);
                 }
             };
-            if (Bukkit.isPrimaryThread()) payout.run();
+            if (SHEggDragonBoss.onServerThread()) payout.run();
             else Bukkit.getScheduler().runTask(plugin, payout);
         }
 
