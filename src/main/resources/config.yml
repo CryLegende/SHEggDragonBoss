@@ -28,6 +28,7 @@
 #   sounds            : sons de chaque rituel
 #   bosses            : réglages de combat de chaque boss
 #   island-permission : privilège d'île (SuperiorSkyblock2) nécessaire pour lancer un rituel
+#   reseau            : mode réseau (plusieurs serveurs se partagent les îles, avec SHSkyBridge)
 #
 # Les textes (messages, titres, noms, barres de boss, hologrammes, lores) sont dans messages.yml.
 # Ce fichier est lu au démarrage du serveur et par /sheggdragonboss reload (les boss en cours appliquent les
@@ -928,3 +929,15 @@ bosses:
 island-permission:
   # Le nom interne du privilège. NE PAS CHANGER après la première utilisation.
   name: "EGG_HATCH"
+
+# ----------------------------------------------------------------#
+#                         MODE RÉSEAU                             #
+# ----------------------------------------------------------------#
+# Actif seulement si SHSkyBridge et SHNetwork sont installés (plusieurs serveurs se partagent les îles, chacune étant
+# hébergée par un seul) et 'actif' vaut true. Un serveur ne reprend et ne réveille que les boss et les rituels des îles
+# qu'il héberge : ceux d'une île hébergée ailleurs ou inconnue ici restent tels quels dans hatching-data.yml et
+# dormant-bosses.yml (jamais supprimés). Les commandes de récompense qui visent le tueur ({player}) passent par SHNetwork :
+# elles s'exécutent là où il se trouve, une fois sa sauvegarde de passage terminée. Les boss dormants et les rituels d'une
+# île suivent l'île quand SHSkyBridge la déplace. Sans eux, rien de ceci n'est utilisé. Demande un redémarrage.
+reseau:
+  actif: true

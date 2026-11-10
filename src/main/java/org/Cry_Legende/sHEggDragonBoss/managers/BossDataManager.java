@@ -1,5 +1,6 @@
 package org.Cry_Legende.sHEggDragonBoss.managers;
 
+import com.bgsoftware.superiorskyblock.api.SuperiorSkyblockAPI;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.Cry_Legende.sHEggDragonBoss.boss.BossType;
 import org.Cry_Legende.sHEggDragonBoss.config.RitualSettings;
@@ -83,6 +84,9 @@ public class BossDataManager {
             plugin.getLogger().warning("Rituel '" + typeId + "' en " + serializeLocation(loc) + " conservé tel quel : ce rituel est inconnu ou désactivé.");
             return false;
         }
+        // Mode réseau : le rituel d'une île hébergée ailleurs (ou inconnue ici) reste tel quel dans le fichier ; lire son bloc
+        // chargerait un chunk qui n'est pas à jour sur ce serveur, et le rituel serait abandonné à tort
+        if (plugin.isNetwork() && !plugin.isHosted(SuperiorSkyblockAPI.getGrid().getIslandAt(loc))) return false;
         if (loc.getBlock().getType() != ritual.block()) {
             // Arrêt brutal en plein compte à rebours : l'animation avait retiré le bloc du monde. On le remet (les objets
             // donnés sont dans les données) : un clic avec l'objet relance le compte à rebours au lieu de tout perdre.

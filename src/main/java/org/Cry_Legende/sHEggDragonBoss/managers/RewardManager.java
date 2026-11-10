@@ -175,6 +175,12 @@ public final class RewardManager {
             .replace("{y}", String.valueOf(loc.getBlockY()))
             .replace("{z}", String.valueOf(loc.getBlockZ()));
         command = ChatColor.translateAlternateColorCodes('&', command);
+        // Mode réseau : une commande visant le joueur s'exécute là où il se trouve, une fois sa sauvegarde de passage
+        // terminée (récompense donnée pendant un changement de serveur = perdue ou doublée)
+        if (player != null && rawCommand.contains("{player}") && plugin.getNetwork() != null) {
+            plugin.getNetwork().runFor(player.getName(), command);
+            return;
+        }
         try {
             Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
         } catch (Exception e) {

@@ -37,6 +37,19 @@ Règles communes :
 - **Mort en scène.** Le coup fatal est retenu : le boss tremble, s'élève ou s'affaisse en tournant, des particules l'entourent en spirale, puis un final éclate (explosion, éclats, anneaux qui s'élargissent, colonne de lumière) et le plugin porte le coup de grâce. Le vide et `/kill` passent sans scène. Réglable dans `bosses.<boss>.death`.
 - **Récompenses.** Elles vont au tueur seul (celui qui porte le coup fatal). À la mort : titre et classement des combattants dans le chat (qui a fait quoi, en %, avec le tueur en dernière ligne), puis pour le tueur l'XP (`xp-reward`), `commands` une fois et `roll-commands` `rolls` fois (`{player}` = le tueur), et les objets lâchés sur place. Chaque coup retire des PV au boss et les compte à son auteur (un cœur brisé compte `hearts.credit-percent` % des PV max) ; ce décompte ne sert qu'au classement et au remplacement du tueur : s'il s'est déconnecté pendant la mort en scène ou si le boss tombe d'une autre cause, le joueur qui a le plus infligé au boss reçoit les récompenses à sa place. Une commande par ligne (pas de `;`).
 
+## Mode réseau
+
+Avec **SHSkyBridge** et **SHNetwork** installés (plusieurs serveurs se partagent les îles, chacune étant hébergée par un seul) et `reseau.actif: true`
+(valeur par défaut) :
+
+- un serveur ne reprend, ne réveille et ne supprime que les boss et les rituels des îles qu'il héberge ; un boss trouvé dans une île hébergée ailleurs
+  (copie périmée d'un chunk) ou inconnue ici n'est ni repris ni supprimé, un boss dormant d'une île inconnue reste dans `dormant-bosses.yml`, et le bloc
+  d'un rituel d'une île hébergée ailleurs n'est pas lu (le chunk n'est pas à jour ici) : l'entrée reste telle quelle dans `hatching-data.yml` ;
+- les boss dormants et les rituels d'une île suivent l'île quand SHSkyBridge la déplace (`/skybridge deplacer`) ; les boss en vie sont des entités, déplacées avec les chunks ;
+- les commandes de récompense qui contiennent `{player}` passent par SHNetwork : elles s'exécutent là où se trouve le tueur, une fois sa sauvegarde de passage terminée.
+
+Sans eux, ou sans la clé `reseau`, le plugin se comporte comme avant.
+
 ### Le combat du dragon
 
 Un Phantom sans IA que le plugin fait voler.

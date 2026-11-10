@@ -1,5 +1,6 @@
 package org.Cry_Legende.sHEggDragonBoss;
 
+import com.bgsoftware.superiorskyblock.api.island.Island;
 import com.bgsoftware.superiorskyblock.api.island.IslandPrivilege;
 import de.oliver.fancyholograms.api.FancyHologramsPlugin;
 import org.Cry_Legende.sHEggDragonBoss.commands.BossCommand;
@@ -10,6 +11,8 @@ import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.ConfigManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.HeartManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.LogManager;
+import org.Cry_Legende.sHEggDragonBoss.network.NetworkLink;
+import org.Cry_Legende.sHEggDragonBoss.network.ShNetworkLink;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
@@ -43,6 +46,10 @@ public final class SHEggDragonBoss extends JavaPlugin {
     private HeartManager heartManager;
     private FancyHologramsPlugin fancyHologramsPlugin;
     private LogManager logManager;
+    // Non nul seulement avec SHSkyBridge et SHNetwork (plusieurs serveurs se partagent les îles) : un serveur ne fait vivre
+    // que les boss et rituels des îles qu'il héberge, n'en supprime aucun pour une île inconnue ici, et les commandes
+    // de récompense passent par SHNetwork (exécutées là où se trouve le joueur)
+    private NetworkLink network;
 
     public static NamespacedKey CHUNK_LOAD_KEY;
     public static NamespacedKey BOSS_KEY;
@@ -100,6 +107,9 @@ public final class SHEggDragonBoss extends JavaPlugin {
         }
 
         this.logManager = new LogManager(this);
+
+        // Avant les managers : le chargement des rituels et des boss dormants consulte déjà le mode réseau
+        enableNetwork();
 
         // configManager.loadConfig(); <-- Déjà fait dans onLoad(), pas besoin de le refaire ici.
 
@@ -173,6 +183,41 @@ public final class SHEggDragonBoss extends JavaPlugin {
         } catch (Exception e) {
             getLogger().log(Level.WARNING, "Erreur lors de l'enregistrement de la permission dans onLoad.", e);
         }
+    }
+
+    /**
+     * Passe en mode réseau si SHSkyBridge et SHNetwork sont installés et 'reseau.actif' est vrai. Les classes qui touchent
+     * à eux ne sont chargées qu'ici : sans eux, le plugin se comporte exactement comme avant.
+     */
+    private void enableNetwork() {
+        if (!getConfig().getBoolean("reseau.actif", true)) return;
+        if (!Bukkit.getPluginManager().isPluginEnabled("SHNetwork") || !Bukkit.getPluginManager().isPluginEnabled("SHSkyBridge")) return;
+        try {
+            network = ShNetworkLink.open();
+            getLogger().info("SHSkyBridge détecté : seuls les boss et les rituels des îles hébergées par ce serveur sont repris et jamais supprimés pour une île inconnue.");
+        } catch (Exception | LinkageError e) {
+            network = null;
+            getLogger().log(Level.SEVERE, "SHSkyBridge ou SHNetwork présent mais inutilisable, fonctionnement d'un serveur seul : " + e);
+        }
+    }
+
+    /** Mode réseau actif (plusieurs serveurs hébergent des îles). */
+    public boolean isNetwork() {
+        return network != null;
+    }
+
+    /** Lien avec SHNetwork et SHSkyBridge, ou null sur un serveur seul. */
+    public NetworkLink getNetwork() {
+        return network;
+    }
+
+    /**
+     * Vrai si l'île est hébergée par ce serveur : toujours vrai sans mode réseau ; une île inconnue ici (null) n'est
+     * jamais considérée comme hébergée, ses chunks n'ont rien de sûr.
+     */
+    public boolean isHosted(Island island) {
+        if (network == null) return true;
+        return island != null && network.isHostedHere(island.getUniqueId());
     }
 
     private boolean setupDependencies() {

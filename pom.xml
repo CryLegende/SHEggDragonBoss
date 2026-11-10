@@ -108,5 +108,18 @@
             <version>2.0</version>
             <scope>provided</scope>
         </dependency>
+        <!-- Facultatifs à l'exécution (softdepend) : sans eux, le plugin se comporte comme sur un serveur seul -->
+        <dependency>
+            <groupId>org.Cry_Legende</groupId>
+            <artifactId>SHNetwork</artifactId>
+            <version>1.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.Cry_Legende</groupId>
+            <artifactId>SHSkyBridge</artifactId>
+            <version>1.0</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 </project>

@@ -213,6 +213,9 @@ public class BossManager {
             return;
         }
         Island island = SuperiorSkyblockAPI.getGrid().getIslandAt(boss.getLocation());
+        // Mode réseau : un boss dans une île hébergée ailleurs (copie périmée du chunk) ou inconnue ici n'est ni repris ni supprimé :
+        // l'hôte de l'île est seul juge de ce qui vit dans ses chunks
+        if (!plugin.isHosted(island)) return;
         if (island == null) {
             plugin.getLogger().warning("Un boss a été trouvé en dehors d'une île et a été supprimé.");
             boss.remove();
@@ -337,9 +340,13 @@ public class BossManager {
             for (UUID islandId : new ArrayList<>(dormantBosses.keySet())) {
                 Island island = SuperiorSkyblockAPI.getIslandByUUID(islandId);
                 if (island == null) {
-                    dormantBosses.remove(islandId);
+                    // Mode réseau : une île inconnue ici n'est pas une île supprimée (créée sur un autre serveur, pas encore reçue) :
+                    // le boss dormant reste dans le fichier
+                    if (!plugin.isNetwork()) dormantBosses.remove(islandId);
                     continue;
                 }
+                // Mode réseau : le boss dormant d'une île hébergée ailleurs se réveille chez son hôte
+                if (!plugin.isHosted(island)) continue;
                 boolean playerFound = island.getIslandMembers(true).stream().map(SuperiorPlayer::asPlayer).anyMatch(p -> p != null && p.isOnline() && p.getGameMode() != org.bukkit.GameMode.SPECTATOR && island.isInside(p.getLocation()));
                 if (playerFound) {
                     BossDataManager.BossData data = dormantBosses.remove(islandId);
