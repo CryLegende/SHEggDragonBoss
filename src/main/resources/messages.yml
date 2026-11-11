@@ -38,10 +38,13 @@ commands:
   # Placeholder : %error% la cause.
   reload-failed: "&7&l« &c&lSH &8&l» &7Le rechargement a échoué : &c%error%&7. Voir la console."
   give-usage: "&7&l« &c&lSH &8&l» &7Usage : &c/sheggdragonboss give <joueur> <coeur|briques> [quantité]"
+  summon-usage: "&7&l« &c&lSH &8&l» &7Usage : &c/sheggdragonboss summon <joueur> <creaking|dragon> [commande si refus]"
   # Placeholder : %player%.
   player-not-found: "&7&l« &c&lSH &8&l» &7Joueur &c%player% &7introuvable ou hors ligne."
   # Placeholders : %amount% la valeur saisie, %max% la quantité maximale.
   invalid-amount: "&7&l« &c&lSH &8&l» &7Quantité invalide : &c%amount%&7 (de 1 à &c%max%&7)."
+  # Placeholder : %type% la valeur saisie.
+  invalid-boss: "&7&l« &c&lSH &8&l» &7Boss inconnu : &c%type%&7. Choix : &ccreaking&7, &cdragon&7."
   # Placeholder : %item% la valeur saisie.
   invalid-item: "&7&l« &c&lSH &8&l» &7Objet inconnu : &c%item%&7. Choix : &ccoeur&7, &cbriques&7."
   # Le rituel du Creaking est désactivé ou inutilisable (config.yml).
@@ -51,6 +54,10 @@ commands:
   item-names:
     heart: "cœur(s) du Creaking"
     bricks: "brique(s) de résine"
+  # /sheggdragonboss summon, à l'expéditeur. Placeholders : %name% nom du boss, %player%, %island% propriétaire de l'île, %health% PV du boss.
+  summon-success: "&7&l« &a&lSH &8&l» &7Boss %name% &7invoqué pour &a%player% &7sur l'île de &a%island% &7(&a%health% &7PV)."
+  # Refus, à l'expéditeur (le joueur reçoit summon.refused). Placeholders : %name%, %player%, %reason% (voir summon.reasons).
+  summon-refused: "&7&l« &c&lSH &8&l» &7Invocation de %name% &7refusée pour &c%player% &7: &c%reason%&7."
   # Envoyé au joueur dont l'inventaire est plein : l'objet est posé à ses pieds.
   inventory-full: "&7&l« &6&lSH &8&l» &7Votre inventaire est plein : l'objet a été posé &6au sol&7."
   # /sheggdragonboss list. Placeholders de header : %bosses% boss (actifs et dormants), %rituals% rituels en cours.
@@ -66,6 +73,28 @@ commands:
     state-dormant: "&6dormant"
     state-countdown: "&acompte à rebours"
     state-waiting: "&7en attente d'objets"
+
+# ----------------------------------------------------------------#
+#                   INVOCATION (summon)                           #
+# ----------------------------------------------------------------#
+# /sheggdragonboss summon <joueur> <boss> [commande si refus].
+summon:
+  # Envoyés au joueur dont l'invocation est refusée. Placeholder : %name% nom du boss.
+  refused:
+    disabled: "&7&l« &c&lSH &8&l» &7Le boss %name% &7est &cdésactivé&7 : impossible de l'invoquer."
+    no-island: "&7&l« &c&lSH &8&l» &7Vous devez vous tenir &csur votre île &7pour invoquer le boss %name%&7."
+    not-member: "&7&l« &c&lSH &8&l» &7Cette île n'est pas la vôtre : seuls ses &cmembres &7peuvent y invoquer le boss %name%&7."
+    busy: "&7&l« &c&lSH &8&l» &7Un boss ou un rituel est &cdéjà en cours &7sur votre île : %name% &7ne peut pas être invoqué."
+    no-spot: "&7&l« &c&lSH &8&l» &7Pas assez de place ici pour %name% &7: placez-vous sur un &csol plein et dégagé&7."
+  # Raisons lues par l'expéditeur de la commande et par le journal (une phrase sans couleur propre, sans point final).
+  reasons:
+    invalid-boss: "boss inconnu"
+    player-not-found: "joueur introuvable ou hors ligne"
+    disabled: "boss désactivé (rituel désactivé dans config.yml)"
+    no-island: "le joueur n'est pas sur une île du monde des îles"
+    not-member: "le joueur n'est pas membre de l'île où il se trouve"
+    busy: "l'île a déjà un boss (en vie ou dormant) ou un rituel en compte à rebours"
+    no-spot: "aucun sol plein et dégagé à sa position"
 
 # ----------------------------------------------------------------#
 #                             RITUELS                             #
@@ -198,7 +227,8 @@ items:
 #                 JOURNAL DES BOSS (SHLogs, fichier boss)         #
 # ----------------------------------------------------------------#
 # Une ligne par évènement, écrite dans le fichier boss de SHLogs (qui ajoute la date). Pas de codes couleur.
-# Placeholders : %island% (voir island-of), %health% et %max% PV, %phase% %phases% %hearts% pour le Creaking (%phase% %phases%
+# Placeholders : %requester% qui a lancé une invocation, %type% le boss, %player% le joueur visé, %reason% la raison d'un refus,
+# %island% (voir island-of), %health% et %max% PV, %phase% %phases% %hearts% pour le Creaking (%phase% %phases%
 # pour le dragon), %killer% le tueur, %player% et %seconds% pour le Sursaut, %names% (les combattants) pour les récompenses (%killer% = celui qui les reçoit).
 journal:
   island-of: "l'île de %owner%"
@@ -209,6 +239,8 @@ journal:
   dragon-restored: "Un boss a été restauré sur %island% (Vie: %health%/%max%, rage %phase%/%phases%)."
   dragon-phase-start: "Boss sur %island% : il rugit, rage %phase%/%phases% (Vie: %health%/%max%)."
   dragon-killed: "Le boss sur %island% a été tué par %killer%."
+  summoned: "Invocation de %requester% : boss %type% pour %player% sur %island%."
+  summon-refused: "Invocation refusée de %requester% : boss %type% pour %player% (%reason%)."
   rewards: "Récompenses du boss sur %island% : données à %killer% (combattants : %names%)."
   creaking-spawned: "Un boss Creaking est apparu sur %island% (Vie: %health%/%max%)."
   creaking-woken: "Un boss Creaking dormant a été réveillé sur %island% (Vie: %health%/%max%, phase %phase%/%phases%, %hearts% cœur(s) à détruire)."

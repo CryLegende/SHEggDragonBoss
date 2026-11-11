@@ -10,10 +10,10 @@ softdepend: [SHLogs, PremiumVanish, SuperVanish, Essentials, SHNetwork, SHSkyBri
 
 commands:
   sheggdragonboss:
-    description: Administration de SHEggDragonBoss (reload, give, list).
-    usage: /sheggdragonboss <reload|give|list>
+    description: Administration de SHEggDragonBoss (reload, give, list, summon).
+    usage: /sheggdragonboss <reload|give|list|summon>
     aliases: [shboss]
-    permission: sheggdragonboss.admin.reload;sheggdragonboss.admin.give;sheggdragonboss.admin.list
+    permission: sheggdragonboss.admin.reload;sheggdragonboss.admin.give;sheggdragonboss.admin.list;sheggdragonboss.admin.summon
 
 permissions:
   sheggdragonboss.admin:
@@ -23,6 +23,7 @@ permissions:
       sheggdragonboss.admin.reload: true
       sheggdragonboss.admin.give: true
       sheggdragonboss.admin.list: true
+      sheggdragonboss.admin.summon: true
   sheggdragonboss.admin.reload:
     description: /sheggdragonboss reload (recharger config.yml et messages.yml).
     default: op
@@ -31,4 +32,7 @@ permissions:
     default: op
   sheggdragonboss.admin.list:
     description: /sheggdragonboss list (boss et rituels en cours).
+    default: op
+  sheggdragonboss.admin.summon:
+    description: /sheggdragonboss summon (invoquer un boss à la position d'un joueur, sur son île).
     default: op

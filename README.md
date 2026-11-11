@@ -88,6 +88,7 @@ Alias de `/sheggdragonboss` : `/shboss`. Sans argument, la commande affiche les 
 | `/sheggdragonboss reload` | Recharge `config.yml` et `messages.yml` (les boss en cours appliquent les nouveaux réglages au tick suivant). Si un fichier est invalide, l'ancienne configuration reste active et la réponse donne le fichier et l'erreur. Ne touche ni `hatching-data.yml` ni `dormant-bosses.yml`. | `sheggdragonboss.admin.reload` |
 | `/sheggdragonboss give <joueur> <coeur\|briques> [quantité]` | Donne le cœur ou les briques de résine du rituel du Creaking, avec le lore qui explique leur usage. Utilisable depuis la console par les boîtes, le temps de jeu, le VoteParty ou le boss de l'œuf. | `sheggdragonboss.admin.give` |
 | `/sheggdragonboss list` | Boss en vie ou dormants (propriétaire de l'île, position, PV, phase) et rituels en cours (objets donnés ou compte à rebours). | `sheggdragonboss.admin.list` |
+| `/sheggdragonboss summon <joueur> <creaking\|dragon> [commande]` | Fait apparaître le boss à la position du joueur, comme à la fin d'un rituel (mêmes PV, phases et récompenses au tueur seul, journal des boss). Le joueur doit être en ligne, dans le monde des îles, sur une île dont il est membre, sans boss (en vie ou dormant) ni rituel en compte à rebours, sur un sol plein et dégagé (le boss est posé sous ses pieds ou à moins de `summon.vertical-search` blocs, puis le `spawn-offset-y` du rituel s'ajoute) ; le rituel du boss doit être activé. Refusé : message au joueur et à l'expéditeur, puis `[commande]` est exécutée par la console, `{player}` remplacé par le joueur (la boutique s'en sert pour rendre l'objet payé). | `sheggdragonboss.admin.summon` |
 
 ## Permissions
 
@@ -97,6 +98,7 @@ Alias de `/sheggdragonboss` : `/shboss`. Sans argument, la commande affiche les 
 | `sheggdragonboss.admin.reload` | `/sheggdragonboss reload`. | `op` |
 | `sheggdragonboss.admin.give` | `/sheggdragonboss give`. | `op` |
 | `sheggdragonboss.admin.list` | `/sheggdragonboss list`. | `op` |
+| `sheggdragonboss.admin.summon` | `/sheggdragonboss summon`. | `op` |
 
 Le rituel lui-même demande le privilège d'île `EGG_HATCH` (SuperiorSkyblock2).
 

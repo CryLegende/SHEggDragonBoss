@@ -45,6 +45,7 @@ public class ConfigManager {
     private DragonSettings dragon;
     private CreakingSettings creaking;
     private String islandPermissionName;
+    private int summonVerticalSearch;
     private int warnings;
 
     public ConfigManager(SHEggDragonBoss plugin) {
@@ -78,6 +79,8 @@ public class ConfigManager {
                 rituals.put(type, disabled(ritual));
             }
         }
+
+        summonVerticalSearch = in.integer("summon.vertical-search", 0);
 
         dragon = readDragon(in, m);
         creaking = readCreaking(in, m);
@@ -593,6 +596,11 @@ public class ConfigManager {
             case DRAGON -> dragon;
             case CREAKING -> creaking;
         };
+    }
+
+    /** Distance verticale maximale, en blocs, entre les pieds du joueur et le sol d'un boss invoqué par commande. */
+    public int summonVerticalSearch() {
+        return summonVerticalSearch;
     }
 
     public String getIslandPermissionName() {

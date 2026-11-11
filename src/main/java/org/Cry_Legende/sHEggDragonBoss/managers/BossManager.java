@@ -9,9 +9,11 @@ import org.Cry_Legende.sHEggDragonBoss.boss.BossType;
 import org.Cry_Legende.sHEggDragonBoss.boss.CreakingBossController;
 import org.Cry_Legende.sHEggDragonBoss.boss.DragonBossController;
 import org.Cry_Legende.sHEggDragonBoss.config.BossSettings;
+import org.Cry_Legende.sHEggDragonBoss.config.Messages;
 import org.Cry_Legende.sHEggDragonBoss.config.RitualSettings;
 import org.Cry_Legende.sHEggDragonBoss.ritual.RitualProcess;
 import org.Cry_Legende.sHEggDragonBoss.ritual.RitualTask;
+import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -143,6 +145,77 @@ public class BossManager {
         }
         double health = computeHealth(configManager.bossSettings(ritual.type()), island);
         createController(ritual.type(), island, spawnLocation, health, health, 0, 0, BossController.StartMode.FIRST_SPAWN);
+    }
+
+    // ------------------------------------------------------------------ invocation par commande
+
+    /** Pourquoi une invocation est refusée ; la clé nomme le texte dans messages.yml (summon.refused.clé et summon.reasons.clé). */
+    public enum SummonRefusal {
+        DISABLED("disabled"),
+        NO_ISLAND("no-island"),
+        NOT_MEMBER("not-member"),
+        BUSY("busy"),
+        NO_SPOT("no-spot");
+
+        private final String key;
+
+        SummonRefusal(String key) {
+            this.key = key;
+        }
+
+        public String key() {
+            return key;
+        }
+    }
+
+    /** Issue d'une invocation : le refus et sa raison, ou l'île, le point d'apparition et les PV du boss créé. */
+    public record SummonResult(SummonRefusal refusal, Island island, Location spot, double health) {
+        public boolean accepted() {
+            return refusal == null;
+        }
+    }
+
+    /**
+     * Fait apparaître le boss {@code type} à la position du joueur, comme à la fin d'un rituel : mêmes PV, même première
+     * apparition (phases, récompenses du tueur seul, boss dormant et mode réseau ne changent pas). Le joueur doit être sur
+     * une île dont il est membre, sans boss (en vie ou dormant) ni rituel en compte à rebours. Le boss apparaît au sol, sous
+     * ses pieds ou à quelques blocs au-dessus ou au-dessous. Le résultat est écrit dans le journal des boss.
+     *
+     * @param requester qui a lancé la commande (nom écrit dans le journal)
+     */
+    public SummonResult summonBoss(BossType type, Player player, String requester) {
+        RitualSettings ritual = configManager.ritual(type);
+        if (ritual == null || !ritual.enabled()) return refuse(type, player, requester, SummonRefusal.DISABLED);
+        Location at = player.getLocation();
+        Island island = SuperiorSkyblockAPI.getGrid().isIslandsWorld(at.getWorld()) ? SuperiorSkyblockAPI.getGrid().getIslandAt(at) : null;
+        if (island == null || island.isSpawn()) return refuse(type, player, requester, SummonRefusal.NO_ISLAND);
+        if (!island.isMember(SuperiorSkyblockAPI.getPlayer(player))) return refuse(type, player, requester, SummonRefusal.NOT_MEMBER);
+        if (isBusy(island)) return refuse(type, player, requester, SummonRefusal.BUSY);
+        Location spot = SummonSpot.find(at, type, ritual.spawnOffsetY(), configManager.summonVerticalSearch(), island);
+        if (spot == null) return refuse(type, player, requester, SummonRefusal.NO_SPOT);
+
+        plugin.getLogManager().log(plugin.getMessages().journal("summoned",
+            "requester", requester, "type", type.id(), "player", player.getName(), "island", islandLabel(island)));
+        double health = computeHealth(configManager.bossSettings(type), island);
+        createController(type, island, spot, health, health, 0, 0, BossController.StartMode.FIRST_SPAWN);
+        return new SummonResult(null, island, spot, health);
+    }
+
+    private SummonResult refuse(BossType type, Player player, String requester, SummonRefusal refusal) {
+        logSummonRefused(requester, type.id(), player.getName(), refusal.key());
+        return new SummonResult(refusal, null, null, 0.0);
+    }
+
+    /** Ligne du journal pour une invocation refusée ; {@code reasonKey} nomme un texte de summon.reasons dans messages.yml. */
+    public void logSummonRefused(String requester, String type, String player, String reasonKey) {
+        Messages messages = plugin.getMessages();
+        plugin.getLogManager().log(messages.journal("summon-refused", "requester", requester, "type", type, "player", player,
+            "reason", ChatColor.stripColor(messages.text("summon.reasons." + reasonKey))));
+    }
+
+    private String islandLabel(Island island) {
+        Messages messages = plugin.getMessages();
+        return island.getOwner() != null ? messages.journal("island-of", "owner", island.getOwner().getName()) : messages.journal("island-unknown");
     }
 
     /** PV du boss sur cette île : {@code base + par-niveau × niveau de l'île + par-membre × membres}. */

@@ -1,6 +1,8 @@
 package org.Cry_Legende.sHEggDragonBoss.commands;
 
+import com.bgsoftware.superiorskyblock.api.island.Island;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
+import org.Cry_Legende.sHEggDragonBoss.boss.BossType;
 import org.Cry_Legende.sHEggDragonBoss.config.Messages;
 import org.Cry_Legende.sHEggDragonBoss.items.CreakingItems;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
@@ -13,19 +15,22 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * /sheggdragonboss (alias /shboss) : recharger la configuration, donner les objets du rituel du Creaking et lister
- * les boss et rituels en cours. Utilisée par la console (boîtes, temps de jeu, VoteParty...) comme par un administrateur.
+ * /sheggdragonboss (alias /shboss) : recharger la configuration, donner les objets du rituel du Creaking, lister
+ * les boss et rituels en cours et invoquer un boss sur l'île d'un joueur. Utilisée par la console (boîtes, temps de jeu,
+ * VoteParty, boutique...) comme par un administrateur.
  */
 public final class BossCommand implements CommandExecutor, TabCompleter {
 
     public static final String RELOAD_PERMISSION = "sheggdragonboss.admin.reload";
     public static final String GIVE_PERMISSION = "sheggdragonboss.admin.give";
     public static final String LIST_PERMISSION = "sheggdragonboss.admin.list";
+    public static final String SUMMON_PERMISSION = "sheggdragonboss.admin.summon";
     /** Nom affiché dans les messages : jamais l'alias tapé. */
     private static final String CANONICAL = "sheggdragonboss";
     /** 36 piles de 64 : un inventaire entier. */
@@ -59,6 +64,8 @@ public final class BossCommand implements CommandExecutor, TabCompleter {
             give(sender, CANONICAL, args);
         } else if (sub.equals("list") && allowed.contains("list")) {
             list(sender);
+        } else if (sub.equals("summon") && allowed.contains("summon")) {
+            summon(sender, args);
         } else {
             messages.send(sender, "commands.usage", "subs", String.join("|", allowed));
         }
@@ -71,6 +78,7 @@ public final class BossCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission(RELOAD_PERMISSION)) subs.add("reload");
         if (sender.hasPermission(GIVE_PERMISSION)) subs.add("give");
         if (sender.hasPermission(LIST_PERMISSION)) subs.add("list");
+        if (sender.hasPermission(SUMMON_PERMISSION)) subs.add("summon");
         return subs;
     }
 
@@ -110,6 +118,59 @@ public final class BossCommand implements CommandExecutor, TabCompleter {
                 "world", ritual.world(), "x", String.valueOf(ritual.x()), "y", String.valueOf(ritual.y()), "z", String.valueOf(ritual.z()),
                 "items", String.valueOf(ritual.items()), "required", String.valueOf(ritual.required()));
         }
+    }
+
+    /**
+     * summon &lt;joueur&gt; &lt;boss&gt; [commande] : le boss apparaît à la position du joueur. Refus (joueur ou boss inconnu, règles de
+     * BossManager#summonBoss) : message au joueur et à l'expéditeur, puis la commande donnée en fin de ligne est exécutée par la
+     * console, {player} remplacé par le joueur (la boutique s'en sert pour rendre l'objet payé).
+     */
+    private void summon(CommandSender sender, String[] args) {
+        Messages messages = plugin.getMessages();
+        if (args.length < 3) {
+            messages.send(sender, "commands.summon-usage");
+            return;
+        }
+        String refusalCommand = String.join(" ", Arrays.copyOfRange(args, 3, args.length)).trim();
+        Player target = Bukkit.getPlayerExact(args[1]);
+        String playerName = target != null ? target.getName() : args[1];
+        BossManager manager = plugin.getBossManager();
+        BossType type = BossType.fromId(args[2]);
+        if (type == null) {
+            messages.send(sender, "commands.invalid-boss", "type", args[2]);
+            manager.logSummonRefused(sender.getName(), args[2], playerName, "invalid-boss");
+            runRefusalCommand(refusalCommand, playerName);
+            return;
+        }
+        if (target == null) {
+            messages.send(sender, "commands.player-not-found", "player", args[1]);
+            manager.logSummonRefused(sender.getName(), type.id(), playerName, "player-not-found");
+            runRefusalCommand(refusalCommand, playerName);
+            return;
+        }
+        String name = messages.text("bosses." + type.id() + ".name");
+        BossManager.SummonResult result = manager.summonBoss(type, target, sender.getName());
+        if (result.accepted()) {
+            Island island = result.island();
+            messages.send(sender, "commands.summon-success", "name", name, "player", playerName,
+                "island", island.getOwner() != null ? island.getOwner().getName() : island.getUniqueId().toString(),
+                "health", String.format(Locale.ROOT, "%.0f", result.health()));
+            return;
+        }
+        String reason = result.refusal().key();
+        messages.send(target, "summon.refused." + reason, "name", name);
+        // Un administrateur qui s'invoque un boss lit déjà le refus : une seule fois
+        if (sender != target) {
+            messages.send(sender, "commands.summon-refused", "name", name, "player", playerName, "reason", messages.text("summon.reasons." + reason));
+        }
+        runRefusalCommand(refusalCommand, playerName);
+    }
+
+    /** Commande de fin de ligne d'un refus, exécutée par la console ({player} = le joueur visé). Vide : rien. */
+    private void runRefusalCommand(String command, String playerName) {
+        String line = command.startsWith("/") ? command.substring(1) : command;
+        if (line.isBlank()) return;
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), line.replace("{player}", playerName));
     }
 
     private void give(CommandSender sender, String label, String[] args) {
@@ -165,6 +226,9 @@ public final class BossCommand implements CommandExecutor, TabCompleter {
             if (args.length == 2) Bukkit.getOnlinePlayers().forEach(p -> result.add(p.getName()));
             else if (args.length == 3) result.addAll(List.of("coeur", "briques"));
             else if (args.length == 4) result.addAll(List.of("1", "10", "64"));
+        } else if (args[0].equalsIgnoreCase("summon") && allowed.contains("summon")) {
+            if (args.length == 2) Bukkit.getOnlinePlayers().forEach(p -> result.add(p.getName()));
+            else if (args.length == 3) for (BossType type : BossType.values()) result.add(type.id());
         }
         String typed = args[args.length - 1].toLowerCase(Locale.ROOT);
         result.removeIf(candidate -> !candidate.toLowerCase(Locale.ROOT).startsWith(typed));

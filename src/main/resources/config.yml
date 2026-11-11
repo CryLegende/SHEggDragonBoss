@@ -18,6 +18,12 @@
 #                                                                 ni dormant-bosses.yml.
 #   /sheggdragonboss give <joueur> <coeur|briques> (quantité)     Donne le cœur ou les briques du rituel du Creaking.
 #   /sheggdragonboss list                                         Boss en vie ou dormants et rituels en cours (île, position, PV, phase).
+#   /sheggdragonboss summon <joueur> <creaking|dragon> [commande]  Fait apparaître le boss à la position du joueur, comme à la fin d'un rituel
+#                                                                 (mêmes PV, mêmes phases, récompenses au tueur seul). Le joueur doit être en
+#                                                                 ligne, sur une île dont il est membre, sans boss (en vie ou dormant) ni
+#                                                                 rituel en compte à rebours, sur un sol plein et dégagé (section summon). Le
+#                                                                 rituel du boss doit être activé. Refusé : message au joueur et à l'expéditeur,
+#                                                                 puis [commande] est exécutée par la console, {player} remplacé par le joueur.
 #   Sans argument, la commande affiche les sous-commandes que l'expéditeur a le droit d'utiliser. Elle marche depuis la console.
 #
 # Permissions :
@@ -25,6 +31,7 @@
 #   sheggdragonboss.admin.reload   /sheggdragonboss reload (op par défaut).
 #   sheggdragonboss.admin.give     /sheggdragonboss give (op par défaut).
 #   sheggdragonboss.admin.list     /sheggdragonboss list (op par défaut).
+#   sheggdragonboss.admin.summon   /sheggdragonboss summon (op par défaut).
 #   Le rituel lui-même demande le privilège d'île de la section island-permission.
 #
 # Le journal des boss est écrit dans le fichier boss de SHLogs. Ses lignes sont dans messages.yml, section journal.
@@ -34,6 +41,7 @@
 #   sounds            : sons de chaque rituel
 #   bosses            : réglages de combat de chaque boss
 #   island-permission : privilège d'île (SuperiorSkyblock2) nécessaire pour lancer un rituel
+#   summon            : invocation d'un boss par commande
 #   reseau            : mode réseau (plusieurs serveurs se partagent les îles, avec SHSkyBridge)
 #
 # Les textes (messages, titres, noms, barres de boss, hologrammes, lores) sont dans messages.yml.
@@ -935,6 +943,16 @@ bosses:
 island-permission:
   # Le nom interne du privilège. NE PAS CHANGER après la première utilisation.
   name: "EGG_HATCH"
+
+# ----------------------------------------------------------------#
+#                           INVOCATION                            #
+# ----------------------------------------------------------------#
+# /sheggdragonboss summon : le boss apparaît sur la colonne du joueur, sur un sol plein avec assez de vide au-dessus pour lui,
+# puis le spawn-offset-y du rituel du boss s'ajoute au sol. Les textes (refus, confirmation, journal) sont dans messages.yml.
+summon:
+  # Distance verticale maximale, en blocs, entre les pieds du joueur et le sol retenu (le plus proche, vers le haut ou le bas).
+  # 0 : seulement le sol sous ses pieds. Aucun sol dégagé dans cette distance : invocation refusée.
+  vertical-search: 4
 
 # ----------------------------------------------------------------#
 #                         MODE RÉSEAU                             #
