@@ -31,19 +31,13 @@ common:
 # ----------------------------------------------------------------#
 commands:
   no-permission: "&7&l« &c&lSH &8&l» &7Vous n'avez pas la permission d'utiliser cette commande."
-  # Placeholder : %label% la commande tapée.
-  unknown: "&7&l« &c&lSH &8&l» &7Sous-commande inconnue. Tapez &c/%label% help&7."
-  help:
-    header: "&e--- Aide SHEggDragonBoss (/%label%) ---"
-    reload: "&e/%label% reload &7- Recharge config.yml et messages.yml."
-    give: "&e/%label% give <joueur> <coeur|briques> [quantité] &7- Donne le cœur ou les briques de résine du Creaking."
-    footer: "&e--------------------------------------"
+  # Placeholder : %subs% les sous-commandes que l'expéditeur a le droit d'utiliser.
+  usage: "&7&l« &c&lSH &8&l» &7Utilisation : &c/sheggdragonboss <%subs%>&7."
   # Placeholder : %warnings% nombre d'avertissements de lecture de config.yml et de messages.yml.
   reloaded: "&7&l« &a&lSH &8&l» &7Configuration et messages &arechargés&7 (&a%warnings% &7avertissement(s)). Les boss en cours appliquent les nouveaux réglages."
   # Placeholder : %error% la cause.
   reload-failed: "&7&l« &c&lSH &8&l» &7Le rechargement a échoué : &c%error%&7. Voir la console."
-  # Placeholder : %label%.
-  give-usage: "&7&l« &c&lSH &8&l» &7Usage : &c/%label% give <joueur> <coeur|briques> [quantité]"
+  give-usage: "&7&l« &c&lSH &8&l» &7Usage : &c/sheggdragonboss give <joueur> <coeur|briques> [quantité]"
   # Placeholder : %player%.
   player-not-found: "&7&l« &c&lSH &8&l» &7Joueur &c%player% &7introuvable ou hors ligne."
   # Placeholders : %amount% la valeur saisie, %max% la quantité maximale.
@@ -59,6 +53,19 @@ commands:
     bricks: "brique(s) de résine"
   # Envoyé au joueur dont l'inventaire est plein : l'objet est posé à ses pieds.
   inventory-full: "&7&l« &6&lSH &8&l» &7Votre inventaire est plein : l'objet a été posé &6au sol&7."
+  # /sheggdragonboss list. Placeholders de header : %bosses% boss (actifs et dormants), %rituals% rituels en cours.
+  list:
+    none: "&7&l« &e&lSH &8&l» &7Aucun boss ni rituel en cours."
+    header: "&7&l« &e&lSH &8&l» &e%bosses% &7boss, &e%rituals% &7rituel(s) en cours"
+    # %type% dragon ou creaking, %owner% propriétaire de l'île, %state% état (voir state-*), %world% %x% %y% %z% position,
+    # %health% %max% PV, %phase% phases déjà franchies.
+    boss: "&8• &e%type% &7de &e%owner% &8(%state%&8) &7%world% %x% %y% %z% &8- &7PV &c%health%&7/&c%max% &8- &7phase &e%phase%"
+    # %items% objets donnés, %required% objets requis.
+    ritual: "&8• &7Rituel &e%type% &8(%state%&8) &7%world% %x% %y% %z% &8- &e%items%&7/&e%required% &7objets"
+    state-active: "&aen vie"
+    state-dormant: "&6dormant"
+    state-countdown: "&acompte à rebours"
+    state-waiting: "&7en attente d'objets"
 
 # ----------------------------------------------------------------#
 #                             RITUELS                             #

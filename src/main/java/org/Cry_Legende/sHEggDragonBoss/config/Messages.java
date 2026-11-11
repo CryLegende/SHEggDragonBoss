@@ -38,24 +38,46 @@ public final class Messages {
         this.file = new File(plugin.getDataFolder(), "messages.yml");
     }
 
-    /** Lit messages.yml (copié depuis le jar s'il manque). Peut être rappelé à chaud. */
+    /** Lit messages.yml (copié depuis le jar s'il manque) au démarrage. Illisible : les textes du jar sont utilisés. */
     public void load() {
-        if (!file.exists()) plugin.saveResource("messages.yml", false);
-        warned.clear();
-        YamlConfiguration loaded = new YamlConfiguration();
+        YamlConfiguration loaded;
         try {
-            loaded.load(file);
+            loaded = read();
         } catch (IOException | InvalidConfigurationException e) {
             plugin.getLogger().severe("messages.yml illisible (" + e.getMessage() + ") : les textes livrés avec le plugin sont utilisés.");
-            warned.add("<fichier>");
             loaded = new YamlConfiguration();
+            attachDefaults(loaded);
+            apply(loaded);
+            warned.add("<fichier>");
+            return;
         }
+        apply(loaded);
+    }
+
+    /**
+     * Lit messages.yml sans rien remplacer (copié depuis le jar s'il manque) : à appliquer avec {@link #apply} une fois
+     * tous les fichiers relus. Lève l'erreur de lecture au lieu de retomber sur les textes du jar.
+     */
+    public YamlConfiguration read() throws IOException, InvalidConfigurationException {
+        if (!file.exists()) plugin.saveResource("messages.yml", false);
+        YamlConfiguration loaded = new YamlConfiguration();
+        loaded.load(file);
+        attachDefaults(loaded);
+        return loaded;
+    }
+
+    /** Remplace les textes en mémoire par ceux de {@code loaded}. */
+    public void apply(YamlConfiguration loaded) {
+        warned.clear();
+        config = loaded;
+    }
+
+    private void attachDefaults(YamlConfiguration loaded) {
         try (InputStream in = plugin.getResource("messages.yml")) {
             if (in != null) loaded.setDefaults(YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8)));
         } catch (IOException e) {
             plugin.getLogger().warning("messages.yml livré dans le jar illisible : " + e.getMessage());
         }
-        config = loaded;
     }
 
     /** Nombre d'avertissements (clés absentes, fichier illisible) depuis le dernier chargement. */

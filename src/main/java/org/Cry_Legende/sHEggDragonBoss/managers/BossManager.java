@@ -231,6 +231,51 @@ public class BossManager {
         return activeBosses.size();
     }
 
+    /** Un boss pour /sheggdragonboss list : actif (en vie) ou dormant (chunk déchargé). */
+    public record BossLine(BossType type, String owner, boolean active, String world, int x, int y, int z,
+                           double health, double maxHealth, int phase) {
+    }
+
+    /** Un rituel pour /sheggdragonboss list : objets donnés, ou compte à rebours lancé. */
+    public record RitualLine(BossType type, String world, int x, int y, int z, int items, int required, boolean countdown) {
+    }
+
+    /**
+     * Boss actifs puis dormants, pour la commande list. Ne lit que les valeurs que les contrôleurs gardent d'un tick à
+     * l'autre (position et PV du dernier tick) : jamais l'entité, qui appartient au fil de son monde.
+     */
+    public java.util.List<BossLine> bossLines() {
+        java.util.List<BossLine> lines = new ArrayList<>();
+        for (BossController controller : activeBosses.values()) {
+            lines.add(line(controller.getBossData(), controller.getIsland(), true));
+        }
+        for (BossDataManager.BossData data : dormantBosses.values()) {
+            lines.add(line(data, SuperiorSkyblockAPI.getIslandByUUID(data.islandId()), false));
+        }
+        return lines;
+    }
+
+    private static BossLine line(BossDataManager.BossData data, Island island, boolean active) {
+        String owner = island != null && island.getOwner() != null ? island.getOwner().getName() : data.islandId().toString();
+        Location at = data.lastLocation();
+        String world = at == null || at.getWorld() == null ? "?" : at.getWorld().getName();
+        return new BossLine(data.type(), owner, active, world,
+            at == null ? 0 : at.getBlockX(), at == null ? 0 : at.getBlockY(), at == null ? 0 : at.getBlockZ(),
+            data.currentHealth(), data.maxHealth(), data.phase());
+    }
+
+    /** Rituels en cours (objets donnés ou compte à rebours), pour la commande list. */
+    public java.util.List<RitualLine> ritualLines() {
+        java.util.List<RitualLine> lines = new ArrayList<>();
+        for (RitualProcess process : ritualProcesses.values()) {
+            Location at = process.getLocation();
+            lines.add(new RitualLine(process.getRitual().type(), at.getWorld() == null ? "?" : at.getWorld().getName(),
+                at.getBlockX(), at.getBlockY(), at.getBlockZ(), process.getCurrentItems(),
+                process.getRitual().requiredAmount(), process.isCountdownStarted()));
+        }
+        return lines;
+    }
+
     public BossController getController(UUID bossId) {
         return activeBosses.get(bossId);
     }

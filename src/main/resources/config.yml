@@ -12,13 +12,19 @@
 # Les deux boss : ne visent jamais les joueurs invisibles (vanish), en créatif ou en spectateur ; meurent en plusieurs temps
 # (section death) ; récompensent celui qui porte le coup fatal, et lui seul (section rewards).
 #
-# Commandes :
-#   /sheggdragonboss reload                                       Recharge config.yml et messages.yml.
+# Commandes (alias : /shboss) :
+#   /sheggdragonboss reload                                       Recharge config.yml et messages.yml. Si un fichier est invalide,
+#                                                                 l'ancienne configuration reste active. Ne touche pas hatching-data.yml
+#                                                                 ni dormant-bosses.yml.
 #   /sheggdragonboss give <joueur> <coeur|briques> (quantité)     Donne le cœur ou les briques du rituel du Creaking.
-#   Alias : /shboss.
+#   /sheggdragonboss list                                         Boss en vie ou dormants et rituels en cours (île, position, PV, phase).
+#   Sans argument, la commande affiche les sous-commandes que l'expéditeur a le droit d'utiliser. Elle marche depuis la console.
 #
 # Permissions :
-#   sheggdragonboss.admin   Utiliser /sheggdragonboss (op par défaut).
+#   sheggdragonboss.admin          Toutes les commandes ci-dessus (op par défaut).
+#   sheggdragonboss.admin.reload   /sheggdragonboss reload (op par défaut).
+#   sheggdragonboss.admin.give     /sheggdragonboss give (op par défaut).
+#   sheggdragonboss.admin.list     /sheggdragonboss list (op par défaut).
 #   Le rituel lui-même demande le privilège d'île de la section island-permission.
 #
 # Le journal des boss est écrit dans le fichier boss de SHLogs. Ses lignes sont dans messages.yml, section journal.
@@ -32,7 +38,7 @@
 #
 # Les textes (messages, titres, noms, barres de boss, hologrammes, lores) sont dans messages.yml.
 # Ce fichier est lu au démarrage du serveur et par /sheggdragonboss reload (les boss en cours appliquent les
-# nouveaux réglages au tick suivant ; le nom du privilège d'île n'est lu qu'au démarrage).
+# nouveaux réglages au tick suivant ; le nom du privilège d'île et la section reseau ne sont lus qu'au démarrage).
 # Une clé absente ou une valeur invalide (matériau, son, particule, entité, effet inconnu...) produit un
 # avertissement dans la console et la valeur livrée avec le plugin est utilisée. Rien ne plante.
 #

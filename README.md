@@ -81,16 +81,22 @@ Le Creaking vanilla se fige tant qu'un joueur le regarde ; le combat joue sur ce
 
 ## Commandes
 
-| Commande | Alias | Description | Permission |
-|---|---|---|---|
-| `/sheggdragonboss reload` | `/shboss` | Recharge `config.yml` et `messages.yml` (les boss en cours appliquent les nouveaux réglages au tick suivant). | `sheggdragonboss.admin` |
-| `/sheggdragonboss give <joueur> <coeur\|briques> [quantité]` | `/shboss` | Donne le cœur ou les briques de résine du rituel du Creaking, avec le lore qui explique leur usage. Utilisable depuis la console par les boîtes, le temps de jeu, le VoteParty ou le boss de l'œuf. | `sheggdragonboss.admin` |
+Alias de `/sheggdragonboss` : `/shboss`. Sans argument, la commande affiche les sous-commandes que l'expéditeur a le droit d'utiliser ; elle marche depuis la console.
+
+| Commande | Description | Permission |
+|---|---|---|
+| `/sheggdragonboss reload` | Recharge `config.yml` et `messages.yml` (les boss en cours appliquent les nouveaux réglages au tick suivant). Si un fichier est invalide, l'ancienne configuration reste active et la réponse donne le fichier et l'erreur. Ne touche ni `hatching-data.yml` ni `dormant-bosses.yml`. | `sheggdragonboss.admin.reload` |
+| `/sheggdragonboss give <joueur> <coeur\|briques> [quantité]` | Donne le cœur ou les briques de résine du rituel du Creaking, avec le lore qui explique leur usage. Utilisable depuis la console par les boîtes, le temps de jeu, le VoteParty ou le boss de l'œuf. | `sheggdragonboss.admin.give` |
+| `/sheggdragonboss list` | Boss en vie ou dormants (propriétaire de l'île, position, PV, phase) et rituels en cours (objets donnés ou compte à rebours). | `sheggdragonboss.admin.list` |
 
 ## Permissions
 
 | Permission | Description | Par défaut |
 |---|---|---|
-| `sheggdragonboss.admin` | Accès à `/sheggdragonboss` (recharger, donner les objets du rituel du Creaking). | `op` |
+| `sheggdragonboss.admin` | Toutes les commandes d'administration. | `op` |
+| `sheggdragonboss.admin.reload` | `/sheggdragonboss reload`. | `op` |
+| `sheggdragonboss.admin.give` | `/sheggdragonboss give`. | `op` |
+| `sheggdragonboss.admin.list` | `/sheggdragonboss list`. | `op` |
 
 Le rituel lui-même demande le privilège d'île `EGG_HATCH` (SuperiorSkyblock2).
 
@@ -101,7 +107,7 @@ Deux fichiers, documentés clé par clé :
 - `config.yml` : rituels (bloc, objet, quantité, animation), sons, réglages de combat des boss, récompenses, privilège d'île. Aucun texte.
 - `messages.yml` : tous les textes (messages de chat, titres, barres d'action, noms et barres de boss, hologrammes, lores des objets, commande, journal des boss). Couleurs `&` et `&#RRGGBB`, placeholders `%comme-ceci%`.
 
-Les deux sont lus au démarrage et par `/sheggdragonboss reload` ; une valeur ou une clé invalide produit un avertissement dans la console et la valeur livrée est utilisée. Cliquez sur un fichier pour l'ouvrir :
+Les deux sont lus au démarrage et par `/sheggdragonboss reload` (le nom du privilège d'île et la section `reseau` ne le sont qu'au démarrage) ; une valeur ou une clé invalide produit un avertissement dans la console et la valeur livrée est utilisée. Cliquez sur un fichier pour l'ouvrir :
 
 <pre>
 plugins/SHEggDragonBoss/

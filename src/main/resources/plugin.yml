@@ -10,12 +10,25 @@ softdepend: [SHLogs, PremiumVanish, SuperVanish, Essentials, SHNetwork, SHSkyBri
 
 commands:
   sheggdragonboss:
-    description: Administration de SHEggDragonBoss (reload, give).
-    usage: /sheggdragonboss <reload|give|help>
+    description: Administration de SHEggDragonBoss (reload, give, list).
+    usage: /sheggdragonboss <reload|give|list>
     aliases: [shboss]
-    permission: sheggdragonboss.admin
+    permission: sheggdragonboss.admin.reload;sheggdragonboss.admin.give;sheggdragonboss.admin.list
 
 permissions:
   sheggdragonboss.admin:
-    description: Accès à /sheggdragonboss (recharger la configuration, donner les objets du rituel du Creaking).
+    description: Toutes les commandes d'administration de SHEggDragonBoss.
+    default: op
+    children:
+      sheggdragonboss.admin.reload: true
+      sheggdragonboss.admin.give: true
+      sheggdragonboss.admin.list: true
+  sheggdragonboss.admin.reload:
+    description: /sheggdragonboss reload (recharger config.yml et messages.yml).
+    default: op
+  sheggdragonboss.admin.give:
+    description: /sheggdragonboss give (donner les objets du rituel du Creaking).
+    default: op
+  sheggdragonboss.admin.list:
+    description: /sheggdragonboss list (boss et rituels en cours).
     default: op

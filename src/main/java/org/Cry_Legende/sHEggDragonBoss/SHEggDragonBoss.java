@@ -18,11 +18,15 @@ import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.logging.Level;
 
 public final class SHEggDragonBoss extends JavaPlugin {
@@ -260,15 +264,34 @@ public final class SHEggDragonBoss extends JavaPlugin {
     }
 
     /**
-     * Relit messages.yml puis config.yml. Les boss en cours reprennent les nouveaux réglages à leur tick suivant ;
-     * le nom du privilège d'île (island-permission) n'est lu qu'au démarrage.
+     * Relit messages.yml puis config.yml. Les deux fichiers sont lus avant de remplacer quoi que ce soit : si l'un est
+     * invalide, l'ancienne configuration reste active. Les boss en cours reprennent les nouveaux réglages à leur tick
+     * suivant ; le nom du privilège d'île (island-permission) et reseau.actif ne sont lus qu'au démarrage.
+     * hatching-data.yml et dormant-bosses.yml ne sont pas touchés.
      *
      * @return le nombre d'avertissements de lecture des deux fichiers
+     * @throws IllegalStateException le fichier invalide et la cause
      */
     public int reloadAll() {
-        messages.load();
+        try {
+            new YamlConfiguration().load(new File(getDataFolder(), "config.yml"));
+        } catch (IOException | InvalidConfigurationException e) {
+            throw new IllegalStateException("config.yml : " + oneLine(e), e);
+        }
+        YamlConfiguration loadedMessages;
+        try {
+            loadedMessages = messages.read();
+        } catch (IOException | InvalidConfigurationException e) {
+            throw new IllegalStateException("messages.yml : " + oneLine(e), e);
+        }
+        messages.apply(loadedMessages);
         configManager.loadConfig();
         return messages.warnings() + configManager.warnings();
+    }
+
+    private static String oneLine(Exception e) {
+        String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        return message.replaceAll("\\s*\\R\\s*", " ").trim();
     }
 
     public static SHEggDragonBoss getInstance() {
