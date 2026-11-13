@@ -457,15 +457,15 @@ bosses:
     # tombe d'une autre cause, le joueur qui a le plus infligé au boss le remplace.
     rewards:
       # Points d'expérience donnés au tueur.
-      xp-reward: 15000
+      xp-reward: 1000
       # Nombre de fois que le tueur lance roll-commands.
-      rolls: 2
+      rolls: 1
       # Lancées une fois pour le tueur. Placeholders : {player} le tueur, {island} le nom de l'île (sinon de son propriétaire),
       # {world}, {x}, {y}, {z}. Pas de ';' : une commande par ligne.
       commands: []
       # Lancées `rolls` fois pour le tueur (le tirage au sort).
       roll-commands:
-        - "rc dragonegg-rewards {player}"
+        - "give {player} diamond 1"
       # Objets lâchés à la mort du boss. Pour n'en lâcher aucun, écrire 'items: []'.
       # Exemple d'objet personnalisé :
       #   - material: "DIAMOND"
@@ -922,17 +922,17 @@ bosses:
     # tombe d'une autre cause, le joueur qui a le plus infligé au boss (cœurs brisés compris) le remplace.
     rewards:
       # Points d'expérience donnés au tueur.
-      xp-reward: 20000
+      xp-reward: 2000
       # Nombre de fois que le tueur lance roll-commands.
-      rolls: 3
+      rolls: 2
       # Lancées une fois pour le tueur : un plancher garanti. Placeholders : {player} le tueur, {island} le nom de l'île (sinon de
       # son propriétaire), {world}, {x}, {y}, {z}. Pas de ';' : une commande par ligne.
       commands:
-        - "shcrates givekey {player} rare 1 physical"
-        - "sm {player} &7&l« &a&lSH &8&l» &7Vous venez de recevoir &c1 &6Clé Rare &7pour avoir vaincu le Boss &2&lCreaking&7."
+        - "give {player} emerald 5"
+        - "msg {player} &aVous avez vaincu le boss &2&lCreaking&a !"
       # Lancées `rolls` fois pour le tueur (le tirage au sort).
       roll-commands:
-        - "rc creaking-rewards {player}"
+        - "give {player} diamond 1"
       # Objets lâchés à la mort (même format que le dragon). Aucun par défaut : les récompenses passent par les commandes.
       items: []
 

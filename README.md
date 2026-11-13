@@ -24,7 +24,7 @@ Chaque boss se lance par un rituel : un clic droit sur un bloc avec un objet (Sh
 | Boss | Phantom « Jeune Ender Dragon », sans IA, qui tourne autour des joueurs de l'île | Creaking à l'IA vanilla (il se fige quand on le regarde) |
 | Combat | Boules de feu de loin, morsure de près, plongeon sur un joueur, rugissement à chaque phase | Frappe vanilla, onde de choc, résine collante, le Noir (éclairs d'obscurité, téléportations, un coup par combattant) et le Sursaut (se retourne contre qui le frappe sur place) |
 | Particularité | Phases à 75 %, 50 % et 25 % des PV : rugissement invulnérable puis souffle qui repousse ; plus rapide à chaque phase ; étourdi et plus vulnérable après un plongeon | Invulnérable par phases (80 %, 60 %, 40 % puis 20 % des PV) tant qu'il reste des cœurs à détruire à la main autour de lui ; plus de cœurs avec plus de combattants |
-| Récompenses (au tueur seul) | 15 000 XP, 2 tirages `rc dragonegg-rewards`, 1 membrane de phantom | 20 000 XP, 1 clé rare garantie et 3 tirages `rc creaking-rewards` |
+| Récompenses (au tueur seul) | XP (`xp-reward`), tirages de `roll-commands` et 1 membrane de phantom | XP (`xp-reward`), commandes garanties (`commands`) et tirages de `roll-commands` |
 
 Règles communes :
 
