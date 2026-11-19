@@ -47,8 +47,17 @@ public record CreakingSettings(
     int shieldAuraIntervalTicks,
     Rewards rewards,
     DeathSettings death,
-    Texts texts
+    Texts texts,
+    Model model
 ) implements BossSettings {
+
+    /**
+     * Modèle 3D qui remplace l'apparence du Creaking : têtes de joueur affichées par paquets (packetevents). file : nom
+     * du fichier (models/&lt;file&gt;.txt du jar) ; scale : taille du modèle ; entityScale : taille de l'entité (hitbox,
+     * portée), pour que les coups touchent là où le modèle se trouve ; facing : rotation du modèle (degrés).
+     */
+    public record Model(boolean enabled, String file, double scale, double entityScale, double facing) {
+    }
 
     /** Barre de boss : apparence normale puis apparence pendant une phase d'invulnérabilité. */
     public record Bar(String title, BarColor color, BarStyle style, String shieldTitle, BarColor shieldColor, BarStyle shieldStyle) {

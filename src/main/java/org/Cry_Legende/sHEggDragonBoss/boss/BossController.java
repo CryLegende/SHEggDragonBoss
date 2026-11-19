@@ -133,6 +133,22 @@ public abstract class BossController extends BukkitRunnable {
     protected void onDeathStart() {
     }
 
+    /** Appelé à chaque tick de la mort (les attaques et {@link #onTick()} sont alors arrêtées). */
+    protected void onDeathTick() {
+    }
+
+    /** Appelé au final de la mort, juste avant le coup de grâce. */
+    protected void onFinale() {
+    }
+
+    /**
+     * Vrai si la mort secoue l'entité (tremblement, élévation, rotation) ; un boss dont le modèle 3D joue sa propre
+     * mort la garde immobile (les particules et les sons restent).
+     */
+    protected boolean shakesOnDeath() {
+        return true;
+    }
+
     /** Vrai si le boss garde son IA vanilla (le Creaking) ; faux s'il est déplacé à la main (le dragon). */
     protected boolean usesVanillaAi() {
         return false;
@@ -176,6 +192,7 @@ public abstract class BossController extends BukkitRunnable {
 
         if (dying) {
             tickDeath();
+            onDeathTick();
             return;
         }
 
@@ -474,11 +491,12 @@ public abstract class BossController extends BukkitRunnable {
 
         // Il tremble de plus en plus fort, s'élève (ou s'affaisse) et tourne sur lui-même de plus en plus vite
         double shake = d.shake() * (0.3 + 0.7 * progress);
-        Location at = deathOrigin.clone().add((random.nextDouble() - 0.5) * 2.0 * shake,
-            d.lift() * progress * progress,
-            (random.nextDouble() - 0.5) * 2.0 * shake);
-        at.setYaw((float) (deathOrigin.getYaw() + d.spinDegrees() * deathTick * progress / 2.0));
-        at.setPitch(deathOrigin.getPitch());
+        Location at = deathOrigin.clone();
+        if (shakesOnDeath()) {
+            at.add((random.nextDouble() - 0.5) * 2.0 * shake, d.lift() * progress * progress, (random.nextDouble() - 0.5) * 2.0 * shake);
+            at.setYaw((float) (deathOrigin.getYaw() + d.spinDegrees() * deathTick * progress / 2.0));
+            at.setPitch(deathOrigin.getPitch());
+        }
         boss.teleport(at);
         boss.setVelocity(new Vector(0, 0, 0));
         if (deathTick % 3 == 0) boss.playHurtAnimation(random.nextFloat() * 360.0f);
@@ -507,6 +525,7 @@ public abstract class BossController extends BukkitRunnable {
     private void finishDeath() {
         Location center = boss.getLocation().add(0, boss.getHeight() / 2.0, 0);
         finaleDone = true;
+        onFinale();
         DeathEffects.finale(plugin, deathSettings(), center, viewers());
         Player killer = deathKiller();
         finishing = true;

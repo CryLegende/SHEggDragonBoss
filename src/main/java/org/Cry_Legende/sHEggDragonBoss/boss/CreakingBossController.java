@@ -3,6 +3,7 @@ package org.Cry_Legende.sHEggDragonBoss.boss;
 import com.bgsoftware.superiorskyblock.api.island.Island;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.Cry_Legende.sHEggDragonBoss.config.CreakingSettings;
+import org.Cry_Legende.sHEggDragonBoss.model.BossModel;
 import org.Cry_Legende.sHEggDragonBoss.config.Fx;
 import org.Cry_Legende.sHEggDragonBoss.managers.BossManager;
 import org.Cry_Legende.sHEggDragonBoss.managers.HeartManager;
@@ -125,6 +126,13 @@ public class CreakingBossController extends BossController implements HeartOwner
     private boolean hovering;
     private boolean nameHidden;
 
+    /** Modèle 3D qui remplace l'apparence du Creaking (null : apparence vanilla). */
+    private BossModel model;
+    /** Fin de l'apparition du modèle (il sort de terre, l'IA attend) ; 0 : aucune en cours. */
+    private int apparitionEndTick;
+    private Location lastModelLocation;
+    private int lastMoveTick = Integer.MIN_VALUE / 2;
+
     private CreakingBossController(SHEggDragonBoss plugin, BossManager bossManager, Island island, Creaking creaking,
                                    double maxHealth, int phasesStarted, int heartsLeft) {
         super(plugin, bossManager, island, creaking, maxHealth,
@@ -200,6 +208,7 @@ public class CreakingBossController extends BossController implements HeartOwner
         }
         // Boss repris en pleine phase d'invulnérabilité : ses cœurs avaient été retirés du monde, on les repose
         if (heartsToPlace > 0) tryPlaceHearts();
+        attachModel(mode == StartMode.FIRST_SPAWN);
     }
 
     @Override
@@ -210,6 +219,14 @@ public class CreakingBossController extends BossController implements HeartOwner
         // Le plugin peut s'arrêter en plein Noir ou en plein Sursaut : le boss ne doit rester ni sans nom ni sans gravité
         boss.setGravity(true);
         showName(true);
+        if (apparitionEndTick > 0 && boss.isValid()) creaking.setAI(true);
+        apparitionEndTick = 0;
+        if (model != null) {
+            model = null;
+            // Mort : le modèle finit de disparaître (il rétrécit au coup de grâce) avant d'être retiré
+            if (boss.isDead()) Bukkit.getScheduler().runTaskLater(plugin, () -> plugin.getModelManager().detach(creaking), 16L);
+            else plugin.getModelManager().detach(creaking);
+        }
     }
 
     @Override
@@ -230,6 +247,23 @@ public class CreakingBossController extends BossController implements HeartOwner
         heartsLeft = 0;
         heartsToPlace = 0;
         showName(true);
+        if (model != null) model.play("mort", 0, 0, true);
+    }
+
+    @Override
+    protected void onDeathTick() {
+        // La mort du modèle continue pendant la mise en scène
+        if (model != null) model.tick();
+    }
+
+    @Override
+    protected void onFinale() {
+        if (model != null) model.vanish();
+    }
+
+    @Override
+    protected boolean shakesOnDeath() {
+        return model == null;
     }
 
     @Override
@@ -255,6 +289,7 @@ public class CreakingBossController extends BossController implements HeartOwner
             enforceArena();
             processAttacks();
         }
+        tickModel();
         if (heartsLeft > 0) {
             if (tickCounter % settings.shieldAuraIntervalTicks() == 0) {
                 settings.shieldAuraFx().spawn(boss.getLocation().add(0, boss.getHeight() / 2, 0),
@@ -274,6 +309,86 @@ public class CreakingBossController extends BossController implements HeartOwner
             creaking.activate(target);
         }
         maintainShield();
+    }
+
+    // ------------------------------------------------------------------ modèle 3D
+
+    /** Instants (ticks) où tombent les coups dans les animations du modèle : l'animation part autant de ticks avant. */
+    private static final int ATTAQUE_IMPACT = 10;
+    private static final int FRAPPE_IMPACT = 14;
+    private static final int ONDE_IMPACT = 15;
+    private static final int RESINE_IMPACT = 18;
+    /** Déplacement par tick (blocs) au-dessus duquel le boss marche ; au-delà de TELEPORT, c'est une téléportation. */
+    private static final double WALK_STEP = 0.02;
+    private static final double TELEPORT = 2.0;
+    private static final int WALK_LINGER_TICKS = 4;
+
+    /** Habille le boss de son modèle 3D ; à sa première apparition, il sort de terre (l'IA attend la fin). */
+    private void attachModel(boolean appearing) {
+        CreakingSettings.Model cfg = settings.model();
+        if (!cfg.enabled() || plugin.getModelManager() == null) return;
+        model = plugin.getModelManager().attach(creaking, cfg.file(), cfg.scale(), cfg.entityScale(), (float) cfg.facing());
+        if (model != null && appearing) {
+            model.play("apparition");
+            creaking.setAI(false);
+            apparitionEndTick = tickCounter + Math.max(1, model.length("apparition"));
+        }
+    }
+
+    /**
+     * Un tick du modèle : état de fond (vol, marche, figé quand on le regarde, repos), animations de l'onde de choc et
+     * de la résine lancées avant leur coup pour que l'impact tombe au bon moment, puis les images clés dues.
+     */
+    private void tickModel() {
+        CreakingSettings.Model cfg = settings.model();
+        if (model == null) {
+            // Modèle pas encore lu au démarrage du boss (lecture en arrière-plan) : nouvel essai chaque seconde
+            if (cfg.enabled() && tickCounter % 20 == 0 && !isDying()) attachModel(false);
+            return;
+        }
+        if (!cfg.enabled()) {
+            plugin.getModelManager().detach(creaking);
+            model = null;
+            return;
+        }
+        if (apparitionEndTick > 0 && tickCounter >= apparitionEndTick) {
+            apparitionEndTick = 0;
+            creaking.setAI(true);
+        }
+        Location here = boss.getLocation();
+        if (lastModelLocation != null && lastModelLocation.getWorld() == here.getWorld()) {
+            double dx = here.getX() - lastModelLocation.getX();
+            double dz = here.getZ() - lastModelLocation.getZ();
+            double step = Math.sqrt(dx * dx + dz * dz);
+            if (step > WALK_STEP && step < TELEPORT) lastMoveTick = tickCounter;
+        }
+        lastModelLocation = here;
+        String loop;
+        if (hovering) loop = "vol";
+        else if (tickCounter - lastMoveTick <= WALK_LINGER_TICKS) loop = "walk";
+        else if (creaking.isActive() && target != null) loop = "fige";
+        else loop = "idle";
+        model.loop(loop);
+        if (!model.busy()) {
+            CreakingSettings.Shockwave shockwave = settings.shockwave();
+            if (shockwave.enabled() && tickCounter + ONDE_IMPACT == firstCheckFrom(nextShockwaveTick)
+                && !playersWithin(shockwave.radius()).isEmpty()) {
+                model.play("onde");
+            }
+            CreakingSettings.Resin resin = settings.resin();
+            if (!model.busy() && resin.enabled() && (!isShielded() || resin.duringShield())
+                && tickCounter + RESINE_IMPACT == firstCheckFrom(nextResinTick) && !playersWithin(resin.radius()).isEmpty()) {
+                model.play("resine");
+            }
+        }
+        model.tick();
+    }
+
+    /** Premier tick de vérification des attaques (multiple de check-interval-ticks) à partir de {@code tick}. */
+    private long firstCheckFrom(long tick) {
+        long interval = settings.checkIntervalTicks();
+        long from = Math.max(tick, tickCounter);
+        return ((from + interval - 1) / interval) * interval;
     }
 
     // ------------------------------------------------------------------ arène
@@ -398,6 +513,7 @@ public class CreakingBossController extends BossController implements HeartOwner
         Location origin = blinkTo(victim, cfg.blinkDistance(), cfg);
         if (origin == null) return;
         pendingStrikes.add(new PendingStrike(id, origin, tickCounter + cfg.strikeDelayTicks()));
+        if (model != null) model.play("frappe", Math.max(0, cfg.strikeDelayTicks() - FRAPPE_IMPACT), 0, false);
     }
 
     private void resolveDueStrikes(CreakingSettings.Blackout cfg) {
@@ -584,6 +700,8 @@ public class CreakingBossController extends BossController implements HeartOwner
      * au tick suivant, pour ne pas imbriquer deux dégâts dans le même événement.
      */
     public void onMeleeHit(Player victim) {
+        // Le coup est déjà porté : l'animation part juste avant son impact
+        if (model != null && !dealingDamage) model.play("attaque", 0, ATTAQUE_IMPACT - 2, false);
         if (dealingDamage || settings.meleeTruePercent() <= 0.0) return;
         Bukkit.getScheduler().runTask(plugin, () -> trueDamage(victim, settings.meleeTruePercent()));
     }
@@ -593,6 +711,7 @@ public class CreakingBossController extends BossController implements HeartOwner
     /** Retient un coup accepté : il alimente le compteur du Sursaut et désigne celui qui frappe le plus. */
     private void recordHit(EntityDamageEvent event) {
         lastHitTick = tickCounter;
+        if (model != null && !model.busy()) model.play("degats");
         Player attacker = attackerOf(event);
         if (attacker != null) damageDealt.merge(attacker.getUniqueId(), event.getFinalDamage(), Double::sum);
     }
@@ -655,6 +774,7 @@ public class CreakingBossController extends BossController implements HeartOwner
             return;
         }
         sursautState = SursautState.WARNING;
+        if (model != null) model.play("sursaut");
         sursautWarningEnd = tickCounter + cfg.warningTicks();
         sursautTarget = victim.getUniqueId();
         cfg.warningSound().play(boss.getLocation());
@@ -691,6 +811,7 @@ public class CreakingBossController extends BossController implements HeartOwner
             return;
         }
         sursautState = SursautState.STRIKING;
+        if (model != null) model.play("frappe", Math.max(0, cfg.strikeDelayTicks() - FRAPPE_IMPACT), 0, false);
         sursautStrikeTick = tickCounter + cfg.strikeDelayTicks();
     }
 
@@ -717,6 +838,7 @@ public class CreakingBossController extends BossController implements HeartOwner
     }
 
     private void startPhase() {
+        if (model != null) model.play("rugissement");
         CreakingSettings.Phase phase = settings.phases().get(phasesStarted);
         phasesStarted++;
         // Plus il y a de combattants, plus il y a de cœurs à briser (au plus le double de ceux de la phase)
@@ -907,11 +1029,13 @@ public class CreakingBossController extends BossController implements HeartOwner
 
         CreakingSettings.Shockwave shockwave = settings.shockwave();
         if (shockwave.enabled() && tickCounter >= nextShockwaveTick && shockwave(shockwave)) {
+            if (model != null && !model.playing("onde")) model.play("onde", 0, ONDE_IMPACT - 2, false);
             nextShockwaveTick = tickCounter + shockwaveCooldown(shielded);
         }
 
         CreakingSettings.Resin resin = settings.resin();
         if (resin.enabled() && (!shielded || resin.duringShield()) && tickCounter >= nextResinTick && resin(resin)) {
+            if (model != null && !model.playing("resine")) model.play("resine", 0, RESINE_IMPACT - 2, false);
             nextResinTick = tickCounter + resin.cooldownTicks();
         }
     }

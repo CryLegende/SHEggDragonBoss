@@ -48,6 +48,7 @@ public final class SHEggDragonBoss extends JavaPlugin {
     private Messages messages;
     private BossManager bossManager;
     private HeartManager heartManager;
+    private org.Cry_Legende.sHEggDragonBoss.model.ModelManager modelManager;
     private FancyHologramsPlugin fancyHologramsPlugin;
     private LogManager logManager;
     // Non nul seulement avec SHSkyBridge et SHNetwork (plusieurs serveurs se partagent les îles) : un serveur ne fait vivre
@@ -117,6 +118,10 @@ public final class SHEggDragonBoss extends JavaPlugin {
 
         // configManager.loadConfig(); <-- Déjà fait dans onLoad(), pas besoin de le refaire ici.
 
+        // Modèles 3D des boss (packetevents) : lus en arrière-plan dès maintenant, avant qu'un boss ne soit repris
+        this.modelManager = new org.Cry_Legende.sHEggDragonBoss.model.ModelManager(this);
+        if (configManager.creaking().model().enabled()) modelManager.preload(configManager.creaking().model().file());
+
         // Les cœurs du Creaking d'abord : un boss repris au démarrage peut en reposer
         this.heartManager = new HeartManager(this);
         this.bossManager = new BossManager(this);
@@ -142,6 +147,10 @@ public final class SHEggDragonBoss extends JavaPlugin {
         if (bossManager != null) {
             bossManager.saveData();
             bossManager.cancelAllRituals(true);
+        }
+        // Après les boss : plus aucun modèle chez les joueurs, les boss encore là redeviennent visibles
+        if (modelManager != null) {
+            modelManager.shutdown();
         }
         // Après les boss : plus aucun cœur du Creaking ne doit rester posé dans les mondes
         if (heartManager != null) {
@@ -312,6 +321,10 @@ public final class SHEggDragonBoss extends JavaPlugin {
 
     public HeartManager getHeartManager() {
         return heartManager;
+    }
+
+    public org.Cry_Legende.sHEggDragonBoss.model.ModelManager getModelManager() {
+        return modelManager;
     }
 
     public FancyHologramsPlugin getFancyHologramsPlugin() {

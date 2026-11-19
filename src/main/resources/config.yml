@@ -506,6 +506,21 @@ bosses:
       shield-color: "RED"
       shield-style: "SOLID"
 
+    # --- MODÈLE 3D ---
+    # Le Creaking est remplacé par un modèle fait de têtes de joueur, affiché par paquets comme les compagnons (aucune
+    # entité en plus côté serveur) et animé par le client : marche, attaques, Noir, Sursaut, phases, mort... Il demande
+    # packetevents ; sans lui, ou avec enabled: false, le Creaking vanilla reste visible.
+    model:
+      enabled: true
+      # Fichier du modèle (models/<file>.txt dans le jar ; un fichier du même nom dans plugins/SHEggDragonBoss/models/ le remplace).
+      file: "creaking"
+      # Taille du modèle : 1 = 3,4 blocs de haut, 1,3 = 4,4 blocs.
+      scale: 1.3
+      # Taille de l'entité (attribut scale : hitbox, portée) : 1,5 met la hitbox du Creaking (2,7 blocs) à la hauteur du modèle.
+      entity-scale: 1.5
+      # Rotation du modèle autour de la verticale (degrés), si son avant ne regarde pas où va le boss.
+      facing: 0
+
     # --- STATISTIQUES ---
     # PV de base ; les PV réels ajoutent dynamic-stats : base + par niveau d'île × niveau + par membre × membres.
     health: 800.0

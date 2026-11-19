@@ -473,7 +473,13 @@ public class ConfigManager {
             in.integer(p + "shield-aura-particles.interval-ticks", 1),
             rewards(in, p + "rewards."),
             readDeath(in, p),
-            texts);
+            texts,
+            new CreakingSettings.Model(
+                in.bool(p + "model.enabled"),
+                in.rawText(p + "model.file"),
+                in.decimal(p + "model.scale", 0.1, 4.0),
+                in.decimal(p + "model.entity-scale", 0.1, 4.0),
+                in.decimal(p + "model.facing", -360.0, 360.0)));
     }
 
     /** Phases d'invulnérabilité, de la plus haute à la plus basse part de PV. Une entrée invalide est ignorée. */
