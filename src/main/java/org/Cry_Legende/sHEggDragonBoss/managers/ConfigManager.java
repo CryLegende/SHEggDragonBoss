@@ -345,7 +345,6 @@ public class ConfigManager {
             in.fx(h + "hit-particles", true),
             in.sfx(h + "break-sound"),
             in.fx(h + "break-particles", true),
-            m.text(t + "hit-actionbar"),
             in.fx(h + "marker-particles", false),
             in.integer(h + "marker-particles.interval-ticks", 1),
             in.decimal(h + "marker-particles.height", 0.5, 32.0),

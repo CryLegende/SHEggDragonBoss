@@ -1,12 +1,30 @@
 package org.Cry_Legende.sHEggDragonBoss.managers;
 
 import com.bgsoftware.superiorskyblock.api.island.Island;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketListenerCommon;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
+import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.util.Quaternion4f;
+import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.wrapper.PacketWrapper;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientAttack;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
+import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
 import org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss;
 import org.Cry_Legende.sHEggDragonBoss.boss.HeartOwner;
-import org.Cry_Legende.sHEggDragonBoss.boss.PlayerText;
 import org.Cry_Legende.sHEggDragonBoss.config.CreakingSettings;
+import org.Cry_Legende.sHEggDragonBoss.model.Packets;
 import org.bukkit.Bukkit;
-import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -16,67 +34,127 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.CreakingHeart;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Interaction;
 import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.util.Transformation;
+import org.bukkit.scheduler.BukkitTask;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Les cœurs du Creaking : pendant une phase d'invulnérabilité, des cœurs éveillés flottent autour du boss et les joueurs les
- * frappent (clic gauche, maintenu ou répété). Un cœur est un affichage de bloc lumineux (BlockDisplay) doublé d'une zone de
- * frappe (Interaction), jamais un vrai bloc : SuperiorSkyblock2 ne les compte donc pas dans le niveau de l'île, aucune
- * protection d'île ne les bloque, et on ne peut ni les miner, ni les pousser, ni les faire exploser.
+ * Les cœurs du Creaking : pendant une phase d'invulnérabilité, des cœurs éveillés posés au sol autour du boss, que les joueurs
+ * frappent (clic gauche, maintenu ou répété). Comme le cookie de SHCookieClicker, un cœur n'existe qu'en paquets, chez les
+ * joueurs proches : un affichage de bloc lumineux et sa zone de frappe. Le serveur ne connaît aucune entité ; le clic arrive en
+ * paquet, s'arrête ici et compte un coup. Rien ne peut donc l'atteindre (protections d'île, explosions, pistons) et
+ * SuperiorSkyblock2 ne le compte pas dans le niveau de l'île.
  * <p>
- * Chaque entité porte un marqueur ; celles qui survivent à un arrêt brutal sont retirées dès que leur chunk se charge.
+ * Au repos, le cœur bat. Chaque coup le fait bondir (il grossit, saute et pivote un instant) puis il retombe un peu plus petit :
+ * son usure se voit, sans barre d'action. Au dernier coup il éclate. Le client fait chaque mouvement seul (interpolation).
+ * <p>
+ * Un cœur est toujours posé sur un bloc solide, avec deux blocs d'air (le sien et celui du dessus) : on peut l'atteindre à pied.
  */
 public class HeartManager {
 
+    /** Distance (blocs) jusqu'à laquelle un joueur voit les cœurs. */
+    private static final double VIEW_DISTANCE = 48.0;
+    private static final int VIEWERS_REFRESH_TICKS = 10;
+    /** Distance maximale entre le joueur et le cœur pour qu'un clic compte (le client le vise déjà à portée de main). */
+    private static final double REACH = 6.0;
+    /** Taille du cœur intact, et part de cette taille perdue juste avant le dernier coup. */
+    private static final float REST_SIZE = 0.9f;
+    private static final float WORN = 0.3f;
+    private static final float TINY = 1.0e-4f;
+    /** Battement au repos : toutes les BEAT_TICKS ticks, il gonfle en BEAT_UP ticks et se relâche en BEAT_DOWN. */
+    private static final int BEAT_TICKS = 24;
+    private static final int BEAT_UP = 3;
+    private static final int BEAT_DOWN = 6;
+    /** Bond d'un coup : gonfle et saute en POP_UP ticks, retombe en POP_DOWN. */
+    private static final int POP_UP = 2;
+    private static final int POP_DOWN = 4;
+    private static final Vector3d ZERO = new Vector3d(0, 0, 0);
+
+    // Métadonnées (Minecraft 1.20.2 à 26.3)
+    private static final int FLAGS = 0;
+    private static final int INTERPOLATION_DELAY = 8;
+    private static final int TRANSFORMATION_DURATION = 9;
+    private static final int TRANSLATION = 11;
+    private static final int SCALE = 12;
+    private static final int LEFT_ROTATION = 13;
+    private static final int GLOW_COLOR = 22;
+    private static final int BLOCK_STATE = 23;
+    private static final int HITBOX_WIDTH = 8;
+    private static final int HITBOX_HEIGHT = 9;
+    private static final int HITBOX_RESPONSIVE = 10;
+
     private static final class Heart {
         private final World world;
+        /** Milieu du bas du bloc : là où se tiennent l'affichage et la zone de frappe. */
+        private final Location base;
         private final Location center;
         private final HeartOwner owner;
-        private final UUID displayId;
-        private final UUID hitboxId;
+        private final int displayId = SpigotReflectionUtil.generateEntityId();
+        private final int hitboxId = SpigotReflectionUtil.generateEntityId();
+        private final UUID displayUuid = UUID.randomUUID();
+        private final UUID hitboxUuid = UUID.randomUUID();
+        private final int hits;
+        private final int beatPhase;
+        private final Map<UUID, Player> viewers = new HashMap<>();
         private int hitsLeft;
+        private boolean broken;
+        /** Pose à envoyer plus tard (fin d'un bond, relâchement d'un battement) ; -1 : aucune. */
+        private int pendingTick = -1;
+        private float pendingSize;
+        private int pendingDuration;
+        private int removeTick = -1;
 
-        private Heart(World world, Location center, HeartOwner owner, UUID displayId, UUID hitboxId, int hits) {
+        private Heart(World world, Location base, HeartOwner owner, int hits, int beatPhase) {
             this.world = world;
-            this.center = center;
+            this.base = base;
+            this.center = base.clone().add(0, 0.5, 0);
             this.owner = owner;
-            this.displayId = displayId;
-            this.hitboxId = hitboxId;
+            this.hits = hits;
             this.hitsLeft = hits;
+            this.beatPhase = beatPhase;
         }
 
-        private boolean chunkLoaded() {
-            return world.isChunkLoaded(center.getBlockX() >> 4, center.getBlockZ() >> 4);
+        /** Taille au repos : elle diminue à chaque coup. */
+        private float restSize() {
+            return REST_SIZE * (1.0f - WORN * (hits - hitsLeft) / (float) hits);
         }
     }
 
     private final SHEggDragonBoss plugin;
+    /** Marqueur des anciens cœurs (entités réelles, jusqu'à la 1.2) : ceux qui restent dans un chunk sont retirés. */
     private final NamespacedKey markerKey;
-    /** Cœurs posés, par identifiant de leur zone de frappe. */
-    private final Map<UUID, Heart> hearts = new ConcurrentHashMap<>();
+    /** Cœurs posés, par numéro de leur zone de frappe. */
+    private final Map<Integer, Heart> hearts = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastHitNanos = new ConcurrentHashMap<>();
     /** Joueurs qui ont déjà reçu l'explication « clic gauche répété » pendant ce combat. */
     private final Set<UUID> hinted = ConcurrentHashMap.newKeySet();
+    private final PacketListenerCommon input;
+    private final BukkitTask ticker;
+    private int blockState = -1;
+    private int now;
 
     public HeartManager(SHEggDragonBoss plugin) {
         this.plugin = plugin;
         this.markerKey = new NamespacedKey(plugin, "boss_heart");
+        this.input = PacketEvents.getAPI().getEventManager().registerListener(new HeartInput());
+        this.ticker = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
         // Les mondes sont tous là un tick après l'activation
         Bukkit.getScheduler().runTask(plugin, () -> {
             sweepLegacyBlocks();
@@ -86,38 +164,23 @@ public class HeartManager {
 
     // ------------------------------------------------------------------ interrogation
 
-    /** Vrai si l'entité est la zone de frappe d'un cœur posé. */
-    public boolean isHeart(Entity entity) {
-        return hearts.containsKey(entity.getUniqueId());
-    }
-
-    /** Nombre de cœurs encore posés pour ce boss ; ceux dont l'entité a disparu (retirée par un administrateur) sont oubliés. */
+    /** Nombre de cœurs encore debout pour ce boss. */
     public int countAlive(UUID bossId) {
         int alive = 0;
-        for (Heart heart : new ArrayList<>(hearts.values())) {
-            if (!heart.owner.bossId().equals(bossId)) continue;
-            // Chunk déchargé : on ne le charge pas pour vérifier, le cœur est considéré comme présent
-            if (heart.chunkLoaded() && !isPresent(heart)) {
-                hearts.remove(heart.hitboxId);
-                Entity display = Bukkit.getEntity(heart.displayId);
-                if (display != null) display.remove();
-            } else {
-                alive++;
-            }
+        for (Heart heart : hearts.values()) {
+            if (!heart.broken && heart.owner.bossId().equals(bossId)) alive++;
         }
         return alive;
     }
 
-    private static boolean isPresent(Heart heart) {
-        Entity hitbox = Bukkit.getEntity(heart.hitboxId);
-        return hitbox != null && hitbox.isValid();
-    }
-
-    /** Centres des cœurs encore posés pour ce boss, dans les chunks chargés (pour les repères visuels et la boussole). */
+    /** Centres des cœurs encore debout pour ce boss, dans les chunks chargés (repères visuels et boussole). */
     public List<Location> locations(UUID bossId) {
         List<Location> result = new ArrayList<>();
         for (Heart heart : hearts.values()) {
-            if (heart.owner.bossId().equals(bossId) && heart.chunkLoaded()) result.add(heart.center.clone());
+            if (!heart.broken && heart.owner.bossId().equals(bossId)
+                && heart.world.isChunkLoaded(heart.base.getBlockX() >> 4, heart.base.getBlockZ() >> 4)) {
+                result.add(heart.center.clone());
+            }
         }
         return result;
     }
@@ -125,9 +188,10 @@ public class HeartManager {
     // ------------------------------------------------------------------ pose
 
     /**
-     * Pose jusqu'à {@code count} cœurs autour de {@code around}. Ils flottent sur des blocs d'air de l'île, dans la couche
-     * du boss, entre {@code min-distance} et {@code max-distance} de lui, espacés d'au moins {@code min-spacing}. Ceux qui
-     * ont un bloc solide dessous sont préférés. Aucun bloc n'est jamais touché.
+     * Pose jusqu'à {@code count} cœurs autour de {@code around}, entre {@code min-distance} et {@code max-distance} de lui,
+     * espacés d'au moins {@code min-spacing}, à sa hauteur ± {@code vertical-range}. Chaque cœur est posé sur un bloc solide
+     * avec deux blocs d'air (le sien et celui du dessus). Si l'île est trop encombrée, une seconde recherche s'élargit
+     * (hauteur ± 3 de plus, distance × 1,5). Aucun bloc n'est jamais touché.
      *
      * @return le nombre de cœurs réellement posés
      */
@@ -136,51 +200,47 @@ public class HeartManager {
         if (world == null || count <= 0) return 0;
         ThreadLocalRandom random = ThreadLocalRandom.current();
         List<Block> picked = new ArrayList<>();
-
-        for (boolean supportedOnly : new boolean[]{true, false}) {
+        for (int pass = 0; pass < 2 && picked.size() < count; pass++) {
+            double maxDistance = pass == 0 ? cfg.maxDistance() : cfg.maxDistance() * 1.5;
+            int range = cfg.verticalRange() + pass * 3;
             for (int attempt = 0; attempt < cfg.placementAttempts() && picked.size() < count; attempt++) {
                 double angle = random.nextDouble() * Math.PI * 2.0;
-                double distance = cfg.minDistance() + random.nextDouble() * Math.max(0.0, cfg.maxDistance() - cfg.minDistance());
+                double distance = cfg.minDistance() + random.nextDouble() * Math.max(0.0, maxDistance - cfg.minDistance());
                 int x = (int) Math.floor(around.getX() + Math.cos(angle) * distance);
                 int z = (int) Math.floor(around.getZ() + Math.sin(angle) * distance);
                 if (!world.isChunkLoaded(x >> 4, z >> 4)) continue;
-                Block candidate = supportedOnly
-                    ? findSupported(world, x, z, around.getBlockY(), cfg.verticalRange())
-                    : floatingAt(world, x, z, around.getBlockY());
-                if (candidate != null && isValidSpot(candidate, island, around, cfg, picked)) picked.add(candidate);
+                Block candidate = findGrounded(world, x, z, around.getBlockY(), range);
+                if (candidate != null && isValidSpot(candidate, island, around, cfg, maxDistance, picked)) picked.add(candidate);
             }
         }
         for (Block block : picked) spawnHeart(owner, block, cfg);
         return picked.size();
     }
 
-    /** Cherche, dans la colonne, un bloc d'air posé sur un bloc solide, au plus près de la hauteur du boss. */
-    private Block findSupported(World world, int x, int z, int bossY, int range) {
+    /** Dans la colonne, au plus près de la hauteur du boss : un bloc d'air posé sur un bloc solide, avec de l'air au-dessus. */
+    private Block findGrounded(World world, int x, int z, int bossY, int range) {
         for (int offset = 0; offset <= range; offset++) {
             for (int sign = 1; sign >= -1; sign -= 2) {
                 if (offset == 0 && sign == -1) continue;
                 int y = bossY + sign * offset;
-                if (y <= world.getMinHeight() || y >= world.getMaxHeight()) continue;
+                if (y - 1 <= world.getMinHeight() || y + 1 >= world.getMaxHeight()) continue;
                 Block block = world.getBlockAt(x, y, z);
-                if (block.getType().isAir() && world.getBlockAt(x, y - 1, z).getType().isSolid()) return block;
+                if (block.getType().isAir()
+                    && world.getBlockAt(x, y + 1, z).getType().isAir()
+                    && world.getBlockAt(x, y - 1, z).getType().isSolid()) {
+                    return block;
+                }
             }
         }
         return null;
     }
 
-    /** Un emplacement sans support, à la hauteur du boss. */
-    private Block floatingAt(World world, int x, int z, int bossY) {
-        if (bossY <= world.getMinHeight() || bossY >= world.getMaxHeight()) return null;
-        return world.getBlockAt(x, bossY, z);
-    }
-
-    private boolean isValidSpot(Block block, Island island, Location boss, CreakingSettings.Hearts cfg, List<Block> alreadyPicked) {
-        if (!block.getType().isAir()) return false;
+    private boolean isValidSpot(Block block, Island island, Location boss, CreakingSettings.Hearts cfg, double maxDistance, List<Block> alreadyPicked) {
         World world = block.getWorld();
         Location center = block.getLocation().add(0.5, 0.5, 0.5);
         if (!island.isInside(center) || !world.getWorldBorder().isInside(center)) return false;
         double distance = center.distance(boss);
-        if (distance < cfg.minDistance() || distance > cfg.maxDistance()) return false;
+        if (distance < cfg.minDistance() || distance > maxDistance) return false;
         double minSpacingSquared = cfg.minSpacing() * cfg.minSpacing();
         for (Block other : alreadyPicked) {
             if (other.getLocation().add(0.5, 0.5, 0.5).distanceSquared(center) < minSpacingSquared) return false;
@@ -191,79 +251,173 @@ public class HeartManager {
         return true;
     }
 
-    /** Un cœur : un affichage de bloc éveillé (lumineux si demandé) et, au même endroit, la zone que les joueurs frappent. */
     private void spawnHeart(HeartOwner owner, Block block, CreakingSettings.Hearts cfg) {
-        World world = block.getWorld();
         Location base = block.getLocation().add(0.5, 0.0, 0.5);
-        BlockData data = Material.CREAKING_HEART.createBlockData();
-        if (data instanceof CreakingHeart heart) heart.setCreakingHeartState(CreakingHeart.State.AWAKE);
+        Heart heart = new Heart(block.getWorld(), base, owner, Math.max(1, cfg.hitsToBreak()), ThreadLocalRandom.current().nextInt(BEAT_TICKS));
+        hearts.put(heart.hitboxId, heart);
+        refreshViewers(heart);
+        cfg.placeFx().spawn(heart.center);
+        cfg.placeSound().play(heart.center);
+    }
 
-        BlockDisplay display = world.spawn(base, BlockDisplay.class, d -> {
-            d.setBlock(data);
-            Transformation transformation = d.getTransformation();
-            transformation.getTranslation().set(-0.5f, 0.0f, -0.5f);
-            d.setTransformation(transformation);
-            if (cfg.glow()) {
-                d.setGlowing(true);
-                d.setGlowColorOverride(Color.fromRGB(cfg.glowColor()));
+    // ------------------------------------------------------------------ affichage
+
+    /** Un tick : poses en attente, battements, joueurs qui arrivent ou s'éloignent, cœurs brisés à retirer. */
+    private void tick() {
+        now++;
+        if (hearts.isEmpty()) return;
+        boolean refresh = now % VIEWERS_REFRESH_TICKS == 0;
+        for (Iterator<Heart> it = hearts.values().iterator(); it.hasNext(); ) {
+            Heart heart = it.next();
+            if (heart.removeTick >= 0 && now >= heart.removeTick) {
+                destroyFor(heart, heart.viewers.values());
+                it.remove();
+                continue;
             }
-            d.getPersistentDataContainer().set(markerKey, PersistentDataType.BYTE, (byte) 1);
-        });
-        Interaction hitbox = world.spawn(base, Interaction.class, i -> {
-            i.setInteractionWidth(1.0f);
-            i.setInteractionHeight(1.0f);
-            i.setResponsive(true);
-            i.getPersistentDataContainer().set(markerKey, PersistentDataType.BYTE, (byte) 1);
-        });
-        Location center = block.getLocation().add(0.5, 0.5, 0.5);
-        hearts.put(hitbox.getUniqueId(), new Heart(world, center, owner, display.getUniqueId(), hitbox.getUniqueId(), cfg.hitsToBreak()));
-        cfg.placeFx().spawn(center);
-        cfg.placeSound().play(center);
+            if (heart.pendingTick >= 0 && now >= heart.pendingTick) {
+                heart.pendingTick = -1;
+                sendPose(heart, heart.pendingSize, 0.0f, 0.0f, heart.pendingDuration);
+            } else if (!heart.broken && heart.pendingTick < 0 && (now + heart.beatPhase) % BEAT_TICKS == 0) {
+                // Battement : il gonfle un peu, puis se relâche
+                float rest = heart.restSize();
+                sendPose(heart, rest * 1.07f, 0.0f, 0.0f, BEAT_UP);
+                schedule(heart, rest, BEAT_UP, BEAT_DOWN);
+            }
+            if (refresh && !heart.broken) refreshViewers(heart);
+        }
+    }
+
+    /** Pose à envoyer dans {@code in} ticks (fin d'un bond, relâchement d'un battement). */
+    private void schedule(Heart heart, float size, int in, int duration) {
+        heart.pendingSize = size;
+        heart.pendingDuration = duration;
+        heart.pendingTick = now + in;
+    }
+
+    /** Les joueurs à moins de VIEW_DISTANCE du cœur le voient ; ceux qui s'éloignent, changent de monde ou partent le perdent. */
+    private void refreshViewers(Heart heart) {
+        double max = VIEW_DISTANCE * VIEW_DISTANCE;
+        Set<UUID> near = new HashSet<>();
+        for (Player player : heart.world.getPlayers()) {
+            if (player.getLocation().distanceSquared(heart.base) > max) continue;
+            near.add(player.getUniqueId());
+            if (!heart.viewers.containsKey(player.getUniqueId())) {
+                heart.viewers.put(player.getUniqueId(), player);
+                spawnFor(heart, player);
+            }
+        }
+        List<Player> gone = new ArrayList<>();
+        for (Iterator<Map.Entry<UUID, Player>> it = heart.viewers.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<UUID, Player> entry = it.next();
+            if (!near.contains(entry.getKey())) {
+                gone.add(entry.getValue());
+                it.remove();
+            }
+        }
+        destroyFor(heart, gone);
+    }
+
+    private void spawnFor(Heart heart, Player viewer) {
+        CreakingSettings.Hearts cfg = plugin.getConfigManager().creaking().hearts();
+        Vector3d position = new Vector3d(heart.base.getX(), heart.base.getY(), heart.base.getZ());
+        List<EntityData<?>> display = new ArrayList<>(pose(heart.restSize(), 0.0f, 0.0f, 0));
+        display.add(new EntityData<>(BLOCK_STATE, EntityDataTypes.BLOCK_STATE, blockState()));
+        if (cfg.glow()) {
+            display.add(new EntityData<>(FLAGS, EntityDataTypes.BYTE, (byte) 0x40));
+            display.add(new EntityData<>(GLOW_COLOR, EntityDataTypes.INT, cfg.glowColor()));
+        }
+        List<PacketWrapper<?>> packets = new ArrayList<>(4);
+        packets.add(new WrapperPlayServerSpawnEntity(heart.displayId, Optional.of(heart.displayUuid), EntityTypes.BLOCK_DISPLAY,
+            position, 0.0f, 0.0f, 0.0f, 0, Optional.of(ZERO)));
+        packets.add(new WrapperPlayServerEntityMetadata(heart.displayId, display));
+        packets.add(new WrapperPlayServerSpawnEntity(heart.hitboxId, Optional.of(heart.hitboxUuid), EntityTypes.INTERACTION,
+            position, 0.0f, 0.0f, 0.0f, 0, Optional.of(ZERO)));
+        packets.add(new WrapperPlayServerEntityMetadata(heart.hitboxId, List.of(
+            new EntityData<>(HITBOX_WIDTH, EntityDataTypes.FLOAT, 1.0f),
+            new EntityData<>(HITBOX_HEIGHT, EntityDataTypes.FLOAT, 1.0f),
+            new EntityData<>(HITBOX_RESPONSIVE, EntityDataTypes.BOOLEAN, true))));
+        Packets.send(viewer, packets);
+    }
+
+    private static void destroyFor(Heart heart, Collection<Player> viewers) {
+        for (Player viewer : viewers) {
+            Packets.send(viewer, List.of(new WrapperPlayServerDestroyEntities(heart.displayId, heart.hitboxId)));
+        }
+    }
+
+    /** Envoie à tous ceux qui voient le cœur une pose : taille, saut (blocs), rotation autour de la verticale, durée du trajet. */
+    private static void sendPose(Heart heart, float size, float lift, float yaw, int duration) {
+        List<EntityData<?>> data = pose(size, lift, yaw, duration);
+        for (Player viewer : heart.viewers.values()) {
+            Packets.send(viewer, List.of(new WrapperPlayServerEntityMetadata(heart.displayId, data)));
+        }
+    }
+
+    /** Le bloc affiché a son coin pour origine : la translation garde le milieu du bas du bloc sur l'entité, quelle que soit sa taille. */
+    private static List<EntityData<?>> pose(float size, float lift, float yaw, int duration) {
+        Quaternionf rotation = new Quaternionf().rotateY((float) Math.toRadians(yaw));
+        Vector3f half = rotation.transform(new Vector3f(size / 2.0f, 0.0f, size / 2.0f));
+        List<EntityData<?>> data = new ArrayList<>(5);
+        data.add(new EntityData<>(INTERPOLATION_DELAY, EntityDataTypes.INT, 0));
+        data.add(new EntityData<>(TRANSFORMATION_DURATION, EntityDataTypes.INT, duration));
+        data.add(new EntityData<>(TRANSLATION, EntityDataTypes.VECTOR3F, new com.github.retrooper.packetevents.util.Vector3f(-half.x, lift, -half.z)));
+        data.add(new EntityData<>(SCALE, EntityDataTypes.VECTOR3F, new com.github.retrooper.packetevents.util.Vector3f(size, size, size)));
+        data.add(new EntityData<>(LEFT_ROTATION, EntityDataTypes.QUATERNION, new Quaternion4f(rotation.x, rotation.y, rotation.z, rotation.w)));
+        return data;
+    }
+
+    private int blockState() {
+        if (blockState < 0) {
+            BlockData data = Material.CREAKING_HEART.createBlockData();
+            if (data instanceof CreakingHeart heart) heart.setCreakingHeartState(CreakingHeart.State.AWAKE);
+            blockState = SpigotConversionUtil.fromBukkitBlockData(data).getGlobalId();
+        }
+        return blockState;
     }
 
     // ------------------------------------------------------------------ coups et destruction
 
-    /**
-     * Un joueur frappe (clic gauche) une zone de cœur. Renvoie vrai si c'était un cœur de boss, que le coup ait compté ou non.
-     */
-    public boolean hit(Player player, Entity entity) {
-        Heart heart = hearts.get(entity.getUniqueId());
-        if (heart == null) return false;
+    /** Un clic gauche sur la zone de frappe d'un cœur (fil principal). */
+    private void hit(UUID playerId, int hitboxId) {
+        Heart heart = hearts.get(hitboxId);
+        Player player = Bukkit.getPlayer(playerId);
+        if (heart == null || heart.broken || player == null || !player.getWorld().equals(heart.world)) return;
+        if (player.getLocation().distanceSquared(heart.center) > REACH * REACH) return;
         CreakingSettings.Hearts cfg = plugin.getConfigManager().creaking().hearts();
 
-        long now = System.nanoTime();
-        Long last = lastHitNanos.get(player.getUniqueId());
-        if (last != null && now - last < (long) (cfg.hitCooldownSeconds() * 1_000_000_000L)) return true;
-        lastHitNanos.put(player.getUniqueId(), now);
+        long nanos = System.nanoTime();
+        Long last = lastHitNanos.get(playerId);
+        if (last != null && nanos - last < (long) (cfg.hitCooldownSeconds() * 1_000_000_000L)) return;
+        lastHitNanos.put(playerId, nanos);
 
-        Location center = heart.center;
         heart.hitsLeft--;
+        float yaw = (ThreadLocalRandom.current().nextBoolean() ? 1 : -1) * (8 + ThreadLocalRandom.current().nextFloat() * 10);
         if (heart.hitsLeft > 0) {
-            cfg.hitFx().spawn(center);
-            cfg.hitSound().play(center);
-            // Le joueur voit tout de suite que son coup compte, et qu'il faut continuer
-            int done = cfg.hitsToBreak() - heart.hitsLeft;
-            PlayerText.actionBar(player, cfg.hitActionbar()
-                .replace("%bar%", "§a" + "▮".repeat(Math.max(0, done)) + "§8" + "▮".repeat(Math.max(0, heart.hitsLeft)))
-                .replace("%done%", String.valueOf(done))
-                .replace("%total%", String.valueOf(cfg.hitsToBreak())));
-            if (hinted.add(player.getUniqueId())) {
+            // Bond : il grossit, saute et pivote, puis retombe un peu plus petit
+            sendPose(heart, heart.restSize() * 1.28f, 0.14f, yaw, POP_UP);
+            schedule(heart, heart.restSize(), POP_UP, POP_DOWN);
+            cfg.hitFx().spawn(heart.center);
+            cfg.hitSound().play(heart.center);
+            if (hinted.add(playerId)) {
                 String hint = plugin.getConfigManager().creaking().texts().heartHint();
                 if (!hint.isEmpty()) player.sendMessage(hint);
             }
-            return true;
+            return;
         }
-
-        discard(heart);
-        cfg.breakFx().spawn(center);
-        cfg.breakSound().play(center);
+        // Dernier coup : un grand bond, puis il se réduit à rien et disparaît
+        heart.broken = true;
+        sendPose(heart, REST_SIZE * 1.4f, 0.22f, yaw * 2, POP_UP);
+        schedule(heart, TINY, POP_UP, POP_DOWN);
+        heart.removeTick = now + POP_UP + POP_DOWN + 1;
+        cfg.breakFx().spawn(heart.center);
+        cfg.breakSound().play(heart.center);
         heart.owner.onHeartDestroyed(player);
-        return true;
     }
 
     public void forgetPlayer(UUID playerId) {
         lastHitNanos.remove(playerId);
         hinted.remove(playerId);
+        for (Heart heart : hearts.values()) heart.viewers.remove(playerId);
     }
 
     // ------------------------------------------------------------------ retrait
@@ -271,33 +425,62 @@ public class HeartManager {
     /** Retire tous les cœurs d'un boss (mort, perte de l'entité, arrêt). */
     public void removeAll(UUID bossId) {
         boolean any = false;
-        for (Heart heart : new ArrayList<>(hearts.values())) {
+        for (Iterator<Heart> it = hearts.values().iterator(); it.hasNext(); ) {
+            Heart heart = it.next();
             if (!heart.owner.bossId().equals(bossId)) continue;
-            discard(heart);
+            destroyFor(heart, heart.viewers.values());
+            it.remove();
             any = true;
         }
         // Fin de combat : le prochain combat réexplique la mécanique à tout le monde
         if (any) hinted.clear();
     }
 
-    /** À l'arrêt du plugin : plus aucun cœur ne doit rester dans les mondes. */
+    /** À l'arrêt du plugin : plus aucun cœur chez personne, plus d'écoute des clics. */
     public void shutdown() {
-        for (Heart heart : new ArrayList<>(hearts.values())) discard(heart);
+        for (Heart heart : hearts.values()) destroyFor(heart, heart.viewers.values());
         hearts.clear();
+        ticker.cancel();
+        PacketEvents.getAPI().getEventManager().unregisterListener(input);
     }
 
-    /** Oublie le cœur et retire ses entités ; si leur chunk est déchargé, le marqueur permet de les retirer au chargement. */
-    private void discard(Heart heart) {
-        hearts.remove(heart.hitboxId);
-        for (UUID id : new UUID[]{heart.displayId, heart.hitboxId}) {
-            Entity entity = Bukkit.getEntity(id);
-            if (entity != null) entity.remove();
+    // ------------------------------------------------------------------ clics (fil réseau)
+
+    /**
+     * Clics sur la zone de frappe d'un cœur : elle n'existe que chez le joueur, le serveur ne la connaît pas, le paquet s'arrête
+     * ici. Un clic gauche est remis au fil principal ; le clic droit est seulement bloqué.
+     */
+    private final class HeartInput extends PacketListenerAbstract {
+        private HeartInput() {
+            super(PacketListenerPriority.NORMAL);
+        }
+
+        @Override
+        public void onPacketReceive(PacketReceiveEvent event) {
+            int entityId;
+            boolean left;
+            if (event.getPacketType() == PacketType.Play.Client.ATTACK) {
+                // Depuis 26.1, le clic gauche sur une entité a son propre paquet
+                entityId = new WrapperPlayClientAttack(event).getEntityId();
+                left = true;
+            } else if (event.getPacketType() == PacketType.Play.Client.INTERACT_ENTITY) {
+                WrapperPlayClientInteractEntity packet = new WrapperPlayClientInteractEntity(event);
+                entityId = packet.getEntityId();
+                left = packet.getAction() == WrapperPlayClientInteractEntity.InteractAction.ATTACK;
+            } else {
+                return;
+            }
+            if (!hearts.containsKey(entityId) || event.getUser() == null || event.getUser().getUUID() == null) return;
+            event.setCancelled(true);
+            if (!left) return;
+            UUID playerId = event.getUser().getUUID();
+            Bukkit.getScheduler().runTask(plugin, () -> hit(playerId, entityId));
         }
     }
 
-    // ------------------------------------------------------------------ entités orphelines
+    // ------------------------------------------------------------------ anciens cœurs (entités réelles, jusqu'à la 1.2)
 
-    /** Entités de cœur qui ne sont plus suivies (arrêt brutal, chunk rechargé après la fin du combat) : retirées un tick plus tard. */
+    /** Entités de cœur d'avant la 1.3 laissées dans un chunk : retirées un tick après son chargement. */
     public void onEntitiesLoad(Collection<? extends Entity> entities) {
         List<Entity> marked = entities.stream().filter(this::isMarked).map(e -> (Entity) e).toList();
         if (marked.isEmpty()) return;
@@ -309,19 +492,14 @@ public class HeartManager {
     }
 
     private void removeStray(Collection<? extends Entity> entities) {
-        Set<UUID> tracked = new HashSet<>();
-        for (Heart heart : hearts.values()) {
-            tracked.add(heart.displayId);
-            tracked.add(heart.hitboxId);
-        }
         int removed = 0;
         for (Entity entity : entities) {
-            if (isMarked(entity) && !tracked.contains(entity.getUniqueId())) {
+            if (isMarked(entity)) {
                 entity.remove();
                 removed++;
             }
         }
-        if (removed > 0) plugin.getLogger().info(removed + " entité(s) de cœur du Creaking orpheline(s) retirée(s).");
+        if (removed > 0) plugin.getLogger().info(removed + " ancienne(s) entité(s) de cœur du Creaking retirée(s).");
     }
 
     /** Anciennes versions : les cœurs étaient de vrais blocs listés dans creaking-hearts.yml. Ceux qui restent sont retirés. */

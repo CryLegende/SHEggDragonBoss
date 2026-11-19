@@ -1,5 +1,17 @@
 package org.Cry_Legende.sHEggDragonBoss.model;
 
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketListenerCommon;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntitySoundEffect;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSoundEffect;
 import io.papermc.paper.event.player.PlayerTrackEntityEvent;
 import io.papermc.paper.event.player.PlayerUntrackEntityEvent;
 import org.bukkit.Bukkit;
@@ -19,6 +31,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,12 +49,19 @@ public final class ModelManager implements Listener {
     private final boolean available;
     private final Map<String, CompletableFuture<ModelFile>> files = new ConcurrentHashMap<>();
     private final Map<Integer, BossModel> byEntity = new ConcurrentHashMap<>();
+    private PacketListenerCommon veil;
+
+    /** Données du Creaking (26.3) : actif (ses yeux brillent) et en train de s'effondrer (ses yeux clignotent). */
+    private static final int CREAKING_ACTIVE = 17;
+    private static final int CREAKING_TEARING_DOWN = 18;
+    private static final String CREAKING_AMBIENT = "minecraft:entity.creaking.ambient";
 
     public ModelManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.available = Bukkit.getPluginManager().isPluginEnabled("packetevents");
         if (available) {
             Bukkit.getPluginManager().registerEvents(this, plugin);
+            veil = PacketEvents.getAPI().getEventManager().registerListener(new Veil());
         } else {
             plugin.getLogger().info("packetevents absent : les boss gardent leur apparence vanilla.");
         }
@@ -129,6 +150,71 @@ public final class ModelManager implements Listener {
             detach(model.entity());
         }
         HandlerList.unregisterAll(this);
+        if (veil != null) {
+            PacketEvents.getAPI().getEventManager().unregisterListener(veil);
+            veil = null;
+        }
+    }
+
+    /** Ce joueur voit-il un boss habillé ? (fil réseau) */
+    private boolean watchesBoss(UUID viewer) {
+        for (BossModel model : byEntity.values()) {
+            if (model.shownTo(viewer)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Le vrai Creaking, invisible sous le modèle, ne doit ni se voir ni s'entendre : le client dessine ses yeux lumineux même
+     * quand il est invisible (ils brillent tant qu'il est « actif »), et il grince à intervalles quand aucun joueur ne le
+     * cible. Chez les joueurs qui voient un boss habillé : « actif » et « s'effondre » sont envoyés à faux (rien d'autre ne
+     * s'en sert côté client), le bruit d'ambiance est retiré. Les autres paquets ne sont pas lus.
+     */
+    private final class Veil extends PacketListenerAbstract {
+        private Veil() {
+            super(PacketListenerPriority.NORMAL);
+        }
+
+        @Override
+        public void onPacketSend(PacketSendEvent event) {
+            Object type = event.getPacketType();
+            if (type != PacketType.Play.Server.ENTITY_METADATA && type != PacketType.Play.Server.SOUND_EFFECT
+                && type != PacketType.Play.Server.ENTITY_SOUND_EFFECT) return;
+            if (byEntity.isEmpty() || event.getUser() == null || event.getUser().getUUID() == null
+                || !watchesBoss(event.getUser().getUUID())) return;
+            if (type == PacketType.Play.Server.ENTITY_METADATA) {
+                WrapperPlayServerEntityMetadata packet = new WrapperPlayServerEntityMetadata(event);
+                if (!byEntity.containsKey(packet.getEntityId())) return;
+                List<EntityData<?>> data = packet.getEntityMetadata();
+                boolean changed = false;
+                for (int i = 0; i < data.size(); i++) {
+                    EntityData<?> entry = data.get(i);
+                    if ((entry.getIndex() == CREAKING_ACTIVE || entry.getIndex() == CREAKING_TEARING_DOWN) && Boolean.TRUE.equals(entry.getValue())) {
+                        data.set(i, new EntityData<>(entry.getIndex(), EntityDataTypes.BOOLEAN, false));
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    packet.setEntityMetadata(data);
+                    event.markForReEncode(true);
+                }
+            } else if (type == PacketType.Play.Server.SOUND_EFFECT) {
+                WrapperPlayServerSoundEffect packet = new WrapperPlayServerSoundEffect(event);
+                if (!CREAKING_AMBIENT.equals(String.valueOf(packet.getSound().getSoundId()))) return;
+                Vector3d at = packet.getPosition();
+                for (BossModel model : byEntity.values()) {
+                    if (model.near(at.getX(), at.getY(), at.getZ(), 2.0)) {
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+            } else {
+                WrapperPlayServerEntitySoundEffect packet = new WrapperPlayServerEntitySoundEffect(event);
+                if (byEntity.containsKey(packet.getEntityId()) && CREAKING_AMBIENT.equals(String.valueOf(packet.getSound().getSoundId()))) {
+                    event.setCancelled(true);
+                }
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

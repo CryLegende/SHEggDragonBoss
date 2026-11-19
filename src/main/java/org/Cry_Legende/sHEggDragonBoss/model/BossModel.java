@@ -99,6 +99,10 @@ public final class BossModel {
     private int now;
     private boolean vanished;
     private boolean destroyed;
+    // Dernière position du boss, lue par le filtre de paquets (fil réseau)
+    private volatile double lastX;
+    private volatile double lastY;
+    private volatile double lastZ;
 
     /**
      * @param scale  taille du modèle (1 = celle du fichier)
@@ -139,6 +143,17 @@ public final class BossModel {
 
     public LivingEntity entity() {
         return entity;
+    }
+
+    /** Ce joueur a-t-il le modèle chez lui ? (fil réseau) */
+    public boolean shownTo(UUID viewer) {
+        return shown.containsKey(viewer);
+    }
+
+    /** Le boss est-il à moins de {@code radius} blocs de ce point ? (fil réseau, dernière position connue) */
+    public boolean near(double x, double y, double z, double radius) {
+        double dx = x - lastX, dy = y - lastY, dz = z - lastZ;
+        return dx * dx + dy * dy + dz * dz <= radius * radius;
     }
 
     /** Durée d'un état du modèle (ticks), 0 s'il n'existe pas. */
@@ -290,6 +305,10 @@ public final class BossModel {
     /** Un tick du serveur (fil principal). */
     public synchronized void tick() {
         now++;
+        Location here = entity.getLocation();
+        lastX = here.getX();
+        lastY = here.getY();
+        lastZ = here.getZ();
         if (destroyed || vanished) {
             return;
         }

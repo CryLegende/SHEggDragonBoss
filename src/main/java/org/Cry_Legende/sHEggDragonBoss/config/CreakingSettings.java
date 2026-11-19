@@ -90,7 +90,6 @@ public record CreakingSettings(
         Fx hitFx,
         Sfx breakSound,
         Fx breakFx,
-        String hitActionbar,
         Fx markerFx,
         int markerIntervalTicks,
         double markerHeight,

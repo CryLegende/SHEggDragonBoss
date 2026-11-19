@@ -560,9 +560,9 @@ bosses:
       - LAVA
       - HOT_FLOOR
     # Aucun coup ne retire plus de ce pourcentage des PV max du boss (0 : pas de plafond). Face à un équipement complet
-    # enchanté, c'est ce plafond qui fixe la durée minimale du combat : 0.5 % = au moins 200 coups, quelle que soit la force
+    # enchanté, c'est ce plafond qui fixe la durée minimale du combat : 0.8 % = au moins 125 coups, quelle que soit la force
     # du coup. Les phases d'invulnérabilité s'y ajoutent.
-    max-hit-percent: 0.5
+    max-hit-percent: 0.8
 
     # --- ARÈNE ---
     # Hors de l'île, ou à plus de max-depth-below-center blocs sous le centre de l'île (vide), le boss est ramené
@@ -597,11 +597,12 @@ bosses:
     # c'est possible. Ce sont des affichages de bloc (pas de vrais blocs) : ils ne comptent pas dans le niveau de l'île,
     # ne se minent pas et aucune protection d'île ne les bloque. On les détruit en les frappant (clic gauche, maintenu ou répété).
     hearts:
-      # Nombre de coups pour détruire un cœur.
-      hits-to-break: 6
+      # Nombre de coups pour détruire un cœur. À chaque coup le cœur bondit puis retombe un peu plus petit ; au dernier il éclate.
+      hits-to-break: 4
       # Délai minimal entre deux coups d'un même joueur, en secondes (anti-spam, aussi quand le clic est maintenu).
       hit-cooldown-seconds: 0.3
-      # Distance au boss, en blocs, entre min-distance et max-distance.
+      # Distance au boss, en blocs, entre min-distance et max-distance. Un cœur est toujours posé sur un bloc solide avec deux
+      # blocs d'air (on l'atteint à pied) ; sur une île trop encombrée, la recherche s'élargit (hauteur ± 3, distance × 1,5).
       min-distance: 4.0
       max-distance: 10.0
       # Les cœurs sont posés à la hauteur du boss ± cette valeur, en blocs.
@@ -642,7 +643,6 @@ bosses:
         count: 20
         spread: 0.4
         speed: 0.05
-      # Le joueur voit sa progression dans la barre d'action à chaque coup qui ne détruit pas le cœur (hit-actionbar, messages.yml).
       # Colonne de particules au-dessus de chaque cœur, visible de loin. count = nombre de particules dans la colonne,
       # height = hauteur de la colonne en blocs, interval-ticks = délai entre deux rafraîchissements.
       marker-particles:

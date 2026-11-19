@@ -4,10 +4,9 @@ main: org.Cry_Legende.sHEggDragonBoss.SHEggDragonBoss
 api-version: '1.20'
 author: Cry_Legende
 description: Deux boss d'île lancés par un rituel (le Jeune Ender Dragon et le Creaking).
-depend: [SuperiorSkyblock2, FancyHolograms]
+depend: [SuperiorSkyblock2, FancyHolograms, packetevents]
 # SHNetwork et SHSkyBridge sont facultatifs : sans eux, le plugin se comporte comme sur un serveur seul.
-# packetevents aussi : sans lui, le Creaking garde son apparence vanilla (pas de modèle 3D).
-softdepend: [SHLogs, PremiumVanish, SuperVanish, Essentials, SHNetwork, SHSkyBridge, packetevents]
+softdepend: [SHLogs, PremiumVanish, SuperVanish, Essentials, SHNetwork, SHSkyBridge]
 
 commands:
   sheggdragonboss:

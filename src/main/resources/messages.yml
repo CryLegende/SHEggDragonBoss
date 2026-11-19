@@ -173,9 +173,6 @@ bosses:
     shield-subtitle: "&7Clic gauche répété sur chacun des &e%hearts% &7cœurs"
     # Envoyé une seule fois à chaque joueur, au premier coup qu'il donne à un cœur pendant le combat.
     heart-hint: "&7&l« &e&lSH &8&l» &7Continuez de &efrapper &7(clic gauche répété) : un cœur ne se &cmine pas&7, il s'use sous les coups."
-    # Barre d'action à chaque coup qui ne détruit pas le cœur. Placeholders : %bar% coups donnés (vert) et restants (gris),
-    # %done% coups donnés, %total% coups nécessaires.
-    hit-actionbar: "&6❤ Cœur &8» %bar% &7%done%/%total% &8- &eclic gauche répété"
     # Boussole : barre d'action de tous les joueurs de l'île proches du boss, tant qu'il reste des cœurs.
     # %arrow% direction du cœur le plus proche par rapport au regard du joueur, %distance% distance en blocs.
     guide-actionbar: "&6❤ &7Cœurs restants : &e%hearts% &8» &7le plus proche : &e%arrow% %distance% m &8- &eclic gauche répété"
