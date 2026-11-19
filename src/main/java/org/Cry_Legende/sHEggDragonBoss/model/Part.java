@@ -40,7 +40,7 @@ public final class Part {
     public static final int SCALE = 12;
     public static final int LEFT_ROTATION = 13;
     public static final int RIGHT_ROTATION = 14;
-    private static final int BILLBOARD = 15;
+    public static final int BILLBOARD = 15;
     private static final int BRIGHTNESS = 16;
     private static final int VIEW_RANGE = 17;
     private static final int SHADOW_RADIUS = 18;
@@ -51,7 +51,7 @@ public final class Part {
     public static final int ITEM = 23;
     private static final int ITEM_CONTEXT = 24;
     private static final int BLOCK_STATE = 23;
-    private static final int TEXT = 23;
+    public static final int TEXT = 23;
     private static final int LINE_WIDTH = 24;
     private static final int BACKGROUND = 25;
     private static final int TEXT_OPACITY = 26;

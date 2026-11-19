@@ -314,6 +314,8 @@ public class CreakingBossController extends BossController implements HeartOwner
     // ------------------------------------------------------------------ modèle 3D
 
     /** Instants (ticks) où tombent les coups dans les animations du modèle : l'animation part autant de ticks avant. */
+    private static final net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer LEGACY =
+        net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection();
     private static final int ATTAQUE_IMPACT = 10;
     private static final int FRAPPE_IMPACT = 14;
     private static final int ONDE_IMPACT = 15;
@@ -328,6 +330,7 @@ public class CreakingBossController extends BossController implements HeartOwner
         CreakingSettings.Model cfg = settings.model();
         if (!cfg.enabled() || plugin.getModelManager() == null) return;
         model = plugin.getModelManager().attach(creaking, cfg.file(), cfg.scale(), cfg.entityScale(), (float) cfg.facing());
+        if (model != null && !nameHidden) model.label(LEGACY.deserialize(settings.name()));
         if (model != null && appearing) {
             model.play("apparition");
             creaking.setAI(false);
@@ -584,6 +587,8 @@ public class CreakingBossController extends BossController implements HeartOwner
         nameHidden = !shown;
         boss.setCustomName(shown ? settings.name() : null);
         boss.setCustomNameVisible(shown);
+        // Le client ne montre pas le nom d'une entité qui porte des passagers : le modèle l'affiche lui-même
+        if (model != null) model.label(shown ? LEGACY.deserialize(settings.name()) : null);
     }
 
     /** Un joueur est « en l'air » (vol, élytres, grand saut) quand rien de solide ne se trouve sous ses pieds sur airborne-clearance blocs. */

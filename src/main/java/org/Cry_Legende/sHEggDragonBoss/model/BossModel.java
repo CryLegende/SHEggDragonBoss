@@ -2,6 +2,7 @@ package org.Cry_Legende.sHEggDragonBoss.model;
 
 import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
+import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
 import com.github.retrooper.packetevents.util.Quaternion4f;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.PacketWrapper;
@@ -11,6 +12,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityRotation;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetPassengers;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -59,6 +61,9 @@ public final class BossModel {
     /** Disparition au coup de grâce (ticks). */
     private static final int VANISH_TICKS = 14;
     private static final Vector3d ZERO = new Vector3d(0, 0, 0);
+    /** Nom du boss : au-dessus de la tête du modèle (blocs). Le client ne montre pas le nom d'une entité qui porte des passagers. */
+    private static final float LABEL_GAP = 0.35f;
+    private static final byte BILLBOARD_CENTER = 3;
 
     private final LivingEntity entity;
     private final ModelFile model;
@@ -66,6 +71,11 @@ public final class BossModel {
     private final Quaternionfc facing;
     private final int[] ids;
     private final UUID[] uuids;
+    private final int labelId;
+    private final UUID labelUuid;
+    /** Hauteur du haut du modèle (blocs, à l'échelle 1, pieds à 0). */
+    private final float top;
+    private Component label;
 
     // Joueurs qui ont le modèle chez eux ; ceux à qui l'envoyer au prochain tick (après le paquet d'apparition du boss) ;
     // ceux chez qui il est encore réduit à un point (tick de l'apparition)
@@ -109,6 +119,13 @@ public final class BossModel {
             ids[i] = Packets.newEntityId();
             uuids[i] = UUID.randomUUID();
         }
+        this.labelId = Packets.newEntityId();
+        this.labelUuid = UUID.randomUUID();
+        float highest = 0;
+        for (Part part : model.parts()) {
+            highest = Math.max(highest, part.transform().translation().y());
+        }
+        this.top = highest;
         ModelFile.State idle = model.state("idle");
         this.loop = idle != null ? idle : model.states().values().iterator().next();
         this.state = loop;
@@ -151,7 +168,7 @@ public final class BossModel {
         pending.remove(viewer.getUniqueId());
         preloading.remove(viewer.getUniqueId());
         if (shown.remove(viewer.getUniqueId()) != null) {
-            Packets.send(viewer, List.of(new WrapperPlayServerDestroyEntities(ids)));
+            Packets.send(viewer, List.of(new WrapperPlayServerDestroyEntities(allIds())));
         }
     }
 
@@ -171,7 +188,7 @@ public final class BossModel {
         int[] riders = realPassengers();
         for (Player viewer : shown.values()) {
             List<PacketWrapper<?>> packets = new ArrayList<>(2);
-            packets.add(new WrapperPlayServerDestroyEntities(ids));
+            packets.add(new WrapperPlayServerDestroyEntities(allIds()));
             if (entity.isValid()) {
                 packets.add(new WrapperPlayServerSetPassengers(entity.getEntityId(), riders));
             }
@@ -184,6 +201,18 @@ public final class BossModel {
 
     public boolean destroyed() {
         return destroyed;
+    }
+
+    /** Nom affiché au-dessus du modèle (null : caché, pendant le Noir par exemple). */
+    public synchronized void label(Component text) {
+        Component wanted = text == null ? Component.empty() : text;
+        if (wanted.equals(label)) {
+            return;
+        }
+        label = wanted;
+        for (Player viewer : shown.values()) {
+            Packets.send(viewer, List.of(new WrapperPlayServerEntityMetadata(labelId, List.of(new EntityData<>(Part.TEXT, EntityDataTypes.ADV_COMPONENT, wanted)))));
+        }
     }
 
     // ------------------------------------------------------------------ états
@@ -253,6 +282,7 @@ public final class BossModel {
             updates.add(data);
         }
         sendUpdates(ids, updates);
+        label(null);
     }
 
     // ------------------------------------------------------------------ tick
@@ -415,8 +445,9 @@ public final class BossModel {
     private void spawnPending() {
         Location location = entity.getLocation();
         Vector3d position = new Vector3d(location.getX(), location.getY() + entity.getHeight(), location.getZ());
-        int[] riders = new int[ids.length - 1];
-        System.arraycopy(ids, 1, riders, 0, riders.length);
+        int[] riders = new int[ids.length];
+        System.arraycopy(ids, 1, riders, 0, ids.length - 1);
+        riders[ids.length - 1] = labelId;
         int[] real = realPassengers();
         int[] onBoss = new int[real.length + 1];
         System.arraycopy(real, 0, onBoss, 0, real.length);
@@ -432,9 +463,10 @@ public final class BossModel {
                     position, 0.0f, sentYaw, 0.0f, 0, Optional.of(ZERO)));
                 packets.add(new WrapperPlayServerEntityMetadata(ids[i], fullData(i, true)));
             }
-            if (riders.length > 0) {
-                packets.add(new WrapperPlayServerSetPassengers(ids[0], riders));
-            }
+            packets.add(new WrapperPlayServerSpawnEntity(labelId, Optional.of(labelUuid), EntityTypes.TEXT_DISPLAY,
+                position, 0.0f, 0.0f, 0.0f, 0, Optional.of(ZERO)));
+            packets.add(new WrapperPlayServerEntityMetadata(labelId, labelData()));
+            packets.add(new WrapperPlayServerSetPassengers(ids[0], riders));
             packets.add(new WrapperPlayServerSetPassengers(entity.getEntityId(), onBoss));
             packets.add(new WrapperPlayServerBundle());
             // Rangé avant la remise du lot : le fil réseau peut le traiter aussitôt
@@ -470,6 +502,23 @@ public final class BossModel {
             }
             Packets.send(viewer, packets);
         }
+    }
+
+    /** Le nom : texte face au joueur, au-dessus de la tête du modèle. */
+    private List<EntityData<?>> labelData() {
+        List<EntityData<?>> data = new ArrayList<>(3);
+        data.add(new EntityData<>(Part.TEXT, EntityDataTypes.ADV_COMPONENT, label == null ? Component.empty() : label));
+        data.add(new EntityData<>(Part.BILLBOARD, EntityDataTypes.BYTE, BILLBOARD_CENTER));
+        data.add(new EntityData<>(Part.TRANSLATION, EntityDataTypes.VECTOR3F,
+            new com.github.retrooper.packetevents.util.Vector3f(0, top * scale - (float) entity.getHeight() + LABEL_GAP, 0)));
+        return data;
+    }
+
+    private int[] allIds() {
+        int[] all = new int[ids.length + 1];
+        System.arraycopy(ids, 0, all, 0, ids.length);
+        all[ids.length] = labelId;
+        return all;
     }
 
     /** Toutes les métadonnées d'une pièce, pour son apparition ; « tiny » : réduite à un point (préchargement). */
