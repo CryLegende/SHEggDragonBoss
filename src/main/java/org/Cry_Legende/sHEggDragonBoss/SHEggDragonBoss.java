@@ -139,7 +139,6 @@ public final class SHEggDragonBoss extends JavaPlugin {
             command.setTabCompleter(bossCommand);
         }
 
-        getLogger().info("SHEggDragonBoss a été activé avec succès !");
     }
 
     @Override
@@ -156,7 +155,6 @@ public final class SHEggDragonBoss extends JavaPlugin {
         if (heartManager != null) {
             heartManager.shutdown();
         }
-        getLogger().info("SHEggDragonBoss a été désactivé.");
     }
 
     /**
@@ -188,7 +186,6 @@ public final class SHEggDragonBoss extends JavaPlugin {
 
             if (!alreadyExists) {
                 IslandPrivilege.register(permissionName);
-                getLogger().info("[onLoad] Permission d'île '" + permissionName + "' pré-enregistrée dans SuperiorSkyblock2.");
             }
 
         } catch (ClassNotFoundException e) {
@@ -247,7 +244,6 @@ public final class SHEggDragonBoss extends JavaPlugin {
     }
 
     private void cleanupAndRestoreState() {
-        getLogger().info("Nettoyage des chunks et restauration des boss...");
         for (World world : Bukkit.getWorlds()) {
             for (Chunk chunk : world.getForceLoadedChunks()) {
                 if (chunk.getPersistentDataContainer().has(CHUNK_LOAD_KEY, PersistentDataType.BYTE)) {
