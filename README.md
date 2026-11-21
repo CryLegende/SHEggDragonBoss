@@ -21,7 +21,7 @@ Chaque boss se lance par un rituel : un clic droit sur un bloc avec un objet (Sh
 | Bloc du rituel | `DRAGON_EGG` | `CREAKING_HEART` |
 | Objet requis | 15 `ECHO_SHARD` | 10 `RESIN_BRICK` |
 | Compte à rebours | 10 s | 10 s |
-| Boss | Phantom « Jeune Ender Dragon », sans IA, qui tourne autour des joueurs de l'île | Creaking à l'IA vanilla (il se fige quand on le regarde) |
+| Boss | « Jeune Ender Dragon » (modèle 3D sur une entité invisible, ou Phantom sans le modèle), sans IA, qui tourne autour des joueurs de l'île | Creaking à l'IA vanilla (il se fige quand on le regarde) |
 | Combat | Boules de feu de loin, morsure de près, plongeon sur un joueur, rugissement à chaque phase | Frappe vanilla, onde de choc, résine collante, le Noir (éclairs d'obscurité, téléportations, un coup par combattant) et le Sursaut (se retourne contre qui le frappe sur place) |
 | Particularité | Phases à 75 %, 50 % et 25 % des PV : rugissement invulnérable puis souffle qui repousse ; plus rapide à chaque phase ; étourdi et plus vulnérable après un plongeon | Invulnérable par phases (80 %, 60 %, 40 % puis 20 % des PV) tant qu'il reste des cœurs à détruire à la main autour de lui ; plus de cœurs avec plus de combattants |
 | Récompenses (au tueur seul) | XP (`xp-reward`), tirages de `roll-commands` et 1 membrane de phantom | XP (`xp-reward`), commandes garanties (`commands`) et tirages de `roll-commands` |
@@ -52,7 +52,7 @@ Sans eux, ou sans la clé `reseau`, le plugin se comporte comme avant.
 
 ### Le combat du dragon
 
-Un Phantom sans IA que le plugin fait voler.
+Une entité sans IA que le plugin fait voler : habillée de son modèle 3D (voir plus bas), ou un Phantom vanilla sans le modèle.
 
 - **Vol en cercle.** Il tourne autour du joueur le plus proche (`flight`) et crache une salve de boules de feu (`ranged-attack`) sur un joueur tiré au hasard ; il mord le joueur qui s'approche trop.
 - **Plongeon.** Il se cabre au-dessus d'un joueur tiré au hasard, fixe l'endroit visé (un cercle de flammes au sol le montre, la barre d'action du joueur le prévient), puis fond dessus. L'impact blesse et repousse tout ce qui est autour. Le dragon reste ensuite étourdi (`stun-ticks`) et encaisse `stun-damage-multiplier` fois plus.
@@ -74,6 +74,15 @@ Le Creaking vanilla se fige tant qu'un joueur le regarde ; le combat joue sur ce
 - Le boss ne quitte jamais l'île et ne tombe jamais dans le vide : hors de l'île ou trop bas, il est ramené au centre.
 - Pendant une phase, il ne frappe qu'en mêlée vanille et lance l'onde de choc plus souvent ; le Noir continue après un court répit.
 
+### Le modèle 3D du dragon
+
+Le dragon est un modèle de 99 pièces (19 têtes de joueur différentes) (`models/dragon.txt` dans le jar) : une wyverne du Vide cramoisie, aux ailes déchirées veinées de rose lumineux, couronne de cornes, yeux lumineux fendus, crocs, pattes à griffes et serres et queue effilée qui finit en dard. Il est affiché par paquets comme le Creaking (même fonctionnement : montage côté client, images clés, rien pour les joueurs qui ne le voient pas).
+
+- **Entité porteuse.** Avec le modèle, le boss n'est plus un Phantom (invisible, il garde ses yeux lumineux à l'écran) mais une entité invisible sans calque d'yeux, `model.entity-type` (un Ghast), réduite par `model.entity-scale` : un cube de 2,4 blocs centré sur le corps, qui sert de hitbox. Un dragon en vie change d'entité de lui-même quand le modèle devient prêt ou qu'il est coupé (PV, phase et classement gardés). Il ne se blesse pas dans les nuages de ses propres boules de feu.
+- **Vol.** Il plane comme le Phantom, ailes ouvertes qui ondulent, un seul battement lent toutes les 6,4 s ; son corps monte au coup d'aile puis redescend en planant par sa position (`model.heave`), sans paquet de plus. Les rotations visent où il regardera à la fin de leur lissage (`model.turn-ticks`) : tant qu'il tourne en rond, une rotation par lissage suffit.
+- **Animations.** États de fond : `vol`, `plonge` (descente), `etourdi` (au sol après l'impact). Actions : `apparition` (éclosion, il reste sur place le temps de se déplier), `cabre` (avant le plongeon, il bascule vers la cible quand elle est fixée), `impact`, `decolle` (fin de l'étourdissement : il se dresse sur ses quatre pattes puis un battement l'arrache du sol ; le plugin le tient à sa place et le soulève de 3 blocs pendant l'animation, puis il reprend son vol), `rugissement` (calé sur `roar.duration-ticks`), `mort` (en vol) ou `mort_sol` (tué pendant l'étourdissement). Étourdi, le modèle reste couché sans tourner sur lui-même (le Phantom tourne). En calque (seuls le cou et la tête bougent, les ailes continuent le vol) : `crache` (lancée 12 ticks avant la salve prévue, les boules de feu partent de la gueule, `model.mouth`), `morsure`, `degats`.
+- Sans packetevents, avec `model.enabled: false` ou si le fichier est illisible, le dragon reste un Phantom vanilla. Un fichier `plugins/SHEggDragonBoss/models/dragon.txt` remplace celui du jar.
+
 ### Le modèle 3D du Creaking
 
 Le Creaking du boss est rendu invisible et remplacé par un modèle de 78 pièces (37 têtes de joueur différentes) (`models/creaking.txt` dans le jar), affiché par paquets avec packetevents, comme les compagnons de SHCompagnons : aucune entité de plus côté serveur, rien n'est envoyé aux joueurs qui ne voient pas le boss.
@@ -89,7 +98,7 @@ Le Creaking du boss est rendu invisible et remplacé par un modèle de 78 pièce
 ## Dépendances
 
 - Obligatoires : `SuperiorSkyblock2`, `FancyHolograms`
-- Obligatoire aussi : `packetevents` (modèle 3D du Creaking et cœurs en paquets)
+- Obligatoire aussi : `packetevents` (modèles 3D du dragon et du Creaking, cœurs en paquets)
 - Optionnelle : `SHLogs`
 
 ## Commandes

@@ -267,7 +267,29 @@ public class ConfigManager {
                 m.text("bosses.dragon.roar-title"),
                 m.text("bosses.dragon.roar-subtitle"),
                 m.text("bosses.dragon.roar-chat"),
-                m.text("bosses.dragon.dive-warning")));
+                m.text("bosses.dragon.dive-warning")),
+            readDragonModel(in, p + "model."));
+    }
+
+    /** Modèle 3D du dragon ; la bouche est une liste [droite, haut, avant] (blocs à l'échelle 1). */
+    private DragonSettings.Model readDragonModel(ConfigReader in, String p) {
+        double[] mouth = {0.0, 0.22, 3.6};
+        List<Double> raw = plugin.getConfig().getDoubleList(p + "mouth");
+        if (raw.size() == 3) {
+            for (int i = 0; i < 3; i++) mouth[i] = Math.max(-16.0, Math.min(16.0, raw.get(i)));
+        } else if (plugin.getConfig().contains(p + "mouth")) {
+            in.warn("'" + p + "mouth' ignoré : une liste de trois nombres [droite, haut, avant] est attendue.");
+        }
+        return new DragonSettings.Model(
+            in.bool(p + "enabled"),
+            in.rawText(p + "file"),
+            in.decimal(p + "scale", 0.1, 4.0),
+            in.livingEntityType(p + "entity-type"),
+            in.decimal(p + "entity-scale", 0.1, 4.0),
+            in.decimal(p + "facing", -360.0, 360.0),
+            in.integer(p + "turn-ticks", 1),
+            in.decimal(p + "heave", 0.0, 4.0),
+            mouth);
     }
 
     /** Seuils de PV (en % du maximum, entre 0 et 100 exclus), du plus haut au plus bas. Une valeur invalide est ignorée. */

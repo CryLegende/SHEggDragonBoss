@@ -37,23 +37,50 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>la première pièce est montée sur le boss (passager côté client), les autres sur elle : le client les déplace
  *       avec le boss, aucun paquet de position ;</li>
- *   <li>quand le corps du boss tourne, une rotation par pièce, lissée par le client ;</li>
+ *   <li>quand le boss tourne, une rotation par pièce, lissée par le client ;</li>
  *   <li>les animations sont des images clés : chaque pièce reçoit sa prochaine pose et la durée pour l'atteindre, le
  *       client fait le trajet seul. Une pièce immobile dans un état ne coûte rien.</li>
  * </ul>
- * L'état de fond (idle, walk...) est choisi par le boss à chaque tick ; une action (attaque, rugissement...) le remplace
- * le temps de sa durée. Chaque changement d'état amène les pièces en {@link #BLEND_TICKS} ticks à leur nouvelle pose.
+ * L'état de fond (idle, walk, vol...) est choisi par le boss à chaque tick ; une action (attaque, rugissement...) le
+ * remplace le temps de sa durée. Une action « en calque » ({@link #playOver}) ne prend que les pièces qu'elle anime (la
+ * tête et le cou d'un dragon qui crache) : les autres continuent l'état de fond sans à-coup. Chaque changement d'état
+ * amène les pièces en {@link #BLEND_TICKS} ticks à leur nouvelle pose.
  * Les méthodes publiques sont appelées sur le fil principal ; le suivi des joueurs peut venir d'un fil de monde.
  */
 public final class BossModel {
+
+    /**
+     * Réglages de l'affichage.
+     *
+     * @param originHeight    hauteur de l'origine du modèle sur l'entité, en part de sa hauteur (0 : pieds du modèle aux
+     *                        pieds du boss, le Creaking ; 0,5 : centre du modèle au centre de la hitbox, le dragon)
+     * @param yawFromLocation vrai : l'orientation est celle de la position du boss (un boss déplacé à la main) ; faux :
+     *                        celle de son corps (IA vanilla)
+     * @param turnTicks       lissage des rotations par le client (ticks)
+     * @param predictTurn     vrai : chaque rotation envoyée vise où le boss regardera à la fin du lissage, au rythme où
+     *                        il tourne ; un boss qui tourne en rond régulier n'a besoin que d'une rotation par lissage
+     */
+    public record Options(float originHeight, boolean yawFromLocation, int turnTicks, boolean predictTurn) {
+        /** Le Creaking : pieds au sol, orientation du corps, lissage court, rotations au fil de l'eau. */
+        public static final Options GROUND = new Options(0.0f, false, 3, false);
+    }
 
     /** Fondu d'un état à l'autre (ticks). */
     private static final int BLEND_TICKS = 3;
     /** Orientation renvoyée quand le corps a tourné d'au moins ce nombre de degrés, au plus tous les TURN_INTERVAL ticks. */
     private static final float TURN_THRESHOLD = 4.0f;
     private static final int TURN_INTERVAL = 3;
-    /** Lissage de l'orientation par le client (ticks). */
-    private static final int TURN_SMOOTHING = 3;
+    /**
+     * Rotation prédite : au moins PREDICT_GAP ticks entre deux envois, un écart de PREDICT_THRESHOLD degrés avec ce que le
+     * client montre pour en déclencher un, au-delà de PREDICT_JUMP degrés d'un tick à l'autre ce n'est pas une vitesse ;
+     * l'orientation suivie est lissée (PREDICT_SMOOTHING par tick) : le cap d'un boss déplacé à la main tremble de quelques
+     * degrés d'un tick à l'autre, et chaque tremblement coûterait une rotation par pièce. 7 ticks entre deux envois, sous
+     * les 10 ticks d'interpolation du client (turn-ticks) : le virage reste continu, avec au plus 3 envois par seconde.
+     */
+    private static final int PREDICT_GAP = 7;
+    private static final float PREDICT_THRESHOLD = 8.0f;
+    private static final float PREDICT_JUMP = 45.0f;
+    private static final float PREDICT_SMOOTHING = 0.35f;
     /** Premier affichage : le modèle reste réduit à un point le temps que le client télécharge les textures des têtes. */
     private static final int PRELOAD_TICKS = 10;
     private static final int REVEAL_TICKS = 3;
@@ -69,11 +96,12 @@ public final class BossModel {
     private final ModelFile model;
     private final float scale;
     private final Quaternionfc facing;
+    private final Options options;
     private final int[] ids;
     private final UUID[] uuids;
     private final int labelId;
     private final UUID labelUuid;
-    /** Hauteur du haut du modèle (blocs, à l'échelle 1, pieds à 0). */
+    /** Hauteur du haut du modèle (blocs, à l'échelle 1, depuis son origine). */
     private final float top;
     private Component label;
 
@@ -86,16 +114,31 @@ public final class BossModel {
     // Dernière pose visée par chaque pièce (repère du modèle) et tick de sa prochaine image clé
     private final Affine[] poses;
     private final int[] poseDue;
+    // État suivi par chaque pièce et tick où elle l'a commencé : toutes le même, sauf pendant une action en calque
+    private final ModelFile.State[] partState;
+    private final int[] partStart;
 
     private ModelFile.State loop;
+    /** Tick de départ de l'état de fond : sa phase, reprise après une action en calque. */
+    private int loopStart;
     private ModelFile.State state;
     private int stateStart;
     private boolean hold;
+    private boolean layered;
     private ModelFile.State queued;
     private int queuedAt;
     private int queuedOffset;
+    private boolean queuedLayered;
     private float sentYaw;
     private int nextTurnTick;
+    // Rotation prédite : ce que le client affiche (de shownFrom à shownTo, de shownAt à shownAt + turnTicks)
+    private float lastYaw;
+    private float smoothYaw;
+    private boolean haveLastYaw;
+    private float yawRate;
+    private float shownFrom;
+    private float shownTo;
+    private int shownAt;
     private int now;
     private boolean vanished;
     private boolean destroyed;
@@ -104,14 +147,19 @@ public final class BossModel {
     private volatile double lastY;
     private volatile double lastZ;
 
+    public BossModel(LivingEntity entity, ModelFile model, float scale, float facing) {
+        this(entity, model, scale, facing, Options.GROUND);
+    }
+
     /**
      * @param scale  taille du modèle (1 = celle du fichier)
      * @param facing rotation en plus autour de la verticale (degrés), 0 : l'avant du modèle est celui du boss
      */
-    public BossModel(LivingEntity entity, ModelFile model, float scale, float facing) {
+    public BossModel(LivingEntity entity, ModelFile model, float scale, float facing, Options options) {
         this.entity = entity;
         this.model = model;
         this.scale = scale;
+        this.options = options;
         // Avant du modèle = avant du boss tel quel (vérifié en jeu) ; facing ne sert qu'à corriger un autre modèle
         this.facing = new Quaternionf().rotateY((float) Math.toRadians(facing));
         int count = model.parts().size();
@@ -119,6 +167,8 @@ public final class BossModel {
         this.uuids = new UUID[count];
         this.poses = new Affine[count];
         this.poseDue = new int[count];
+        this.partState = new ModelFile.State[count];
+        this.partStart = new int[count];
         for (int i = 0; i < count; i++) {
             ids[i] = Packets.newEntityId();
             uuids[i] = UUID.randomUUID();
@@ -131,14 +181,21 @@ public final class BossModel {
         }
         this.top = highest;
         ModelFile.State idle = model.state("idle");
+        if (idle == null) {
+            idle = model.state("vol");
+        }
         this.loop = idle != null ? idle : model.states().values().iterator().next();
         this.state = loop;
         for (int i = 0; i < count; i++) {
             Part part = model.parts().get(i);
             Track track = part.stateTrack(state.index());
             poses[i] = track != null ? track.at(0) : part.transform();
+            partState[i] = loop;
         }
-        this.sentYaw = entity.getBodyYaw();
+        this.sentYaw = yaw();
+        this.shownFrom = sentYaw;
+        this.shownTo = sentYaw;
+        this.shownAt = -options.turnTicks();
     }
 
     public LivingEntity entity() {
@@ -160,6 +217,22 @@ public final class BossModel {
     public int length(String name) {
         ModelFile.State s = model.state(name);
         return s == null ? 0 : s.length();
+    }
+
+    /** Taille du modèle (1 = celle du fichier). */
+    public float scale() {
+        return scale;
+    }
+
+    /**
+     * Instant (ticks) de l'état de fond {@code name} quand il se voit (seul ou sous une action en calque), -1 sinon :
+     * de quoi caler sur l'animation un mouvement fait par le boss lui-même (le dragon monte à chaque coup d'aile).
+     */
+    public synchronized int loopTick(String name) {
+        if (!loop.name().equals(name) || vanished || destroyed || (state != loop && !layered)) {
+            return -1;
+        }
+        return Math.floorMod(now - loopStart, Math.max(1, loop.length()));
     }
 
     // ------------------------------------------------------------------ joueurs qui le voient
@@ -232,26 +305,55 @@ public final class BossModel {
 
     // ------------------------------------------------------------------ états
 
-    /** État de fond voulu (idle, walk, fige, vol) : joué tout de suite si aucune action n'est en cours. */
+    /**
+     * État de fond voulu (idle, walk, fige, vol...) : joué tout de suite si aucune action n'est en cours. Une action en
+     * calque s'arrête pour lui laisser la place (le dragon qui plonge n'attend pas la fin de sa morsure).
+     */
     public synchronized void loop(String name) {
         ModelFile.State wanted = model.state(name);
         if (wanted == null || wanted == loop) {
             return;
         }
         loop = wanted;
-        if (!busy()) {
-            switchState(wanted, 0, false);
+        if (layered && !hold) {
+            queued = null;
+            switchState(wanted, 0, false, false, false);
+        } else if (!busy()) {
+            switchState(wanted, 0, false, false, false);
         }
     }
 
     /**
      * Joue une action une fois, à la place de l'état en cours.
      *
-     * @param delay  ticks d'attente avant de la lancer (le modèle garde son état d'ici là)
-     * @param offset instant de l'action où commencer (ticks) : pour caler un impact sur un coup déjà porté
+     * @param delay   ticks d'attente avant de la lancer (le modèle garde son état d'ici là)
+     * @param offset  instant de l'action où commencer (ticks) : pour caler un impact sur un coup déjà porté
      * @param holdEnd vrai : la pose finale est tenue (mort) au lieu de revenir à l'état de fond
      */
     public synchronized void play(String name, int delay, int offset, boolean holdEnd) {
+        start(name, delay, offset, holdEnd, false);
+    }
+
+    public void play(String name) {
+        play(name, 0, 0, false);
+    }
+
+    /**
+     * Joue une action en calque : seules les pièces qu'elle anime la suivent, les autres continuent l'état de fond ; à
+     * la fin, l'état de fond reprend à sa phase (pas depuis son début). Sans effet pendant une action entière.
+     */
+    public synchronized void playOver(String name, int delay, int offset) {
+        if (busy() && !layered) {
+            return;
+        }
+        start(name, delay, offset, false, true);
+    }
+
+    public void playOver(String name) {
+        playOver(name, 0, 0);
+    }
+
+    private void start(String name, int delay, int offset, boolean holdEnd, boolean overlay) {
         ModelFile.State action = model.state(name);
         if (action == null || destroyed || vanished || hold) {
             return;
@@ -260,14 +362,28 @@ public final class BossModel {
             queued = action;
             queuedAt = now + delay;
             queuedOffset = offset;
+            queuedLayered = overlay;
             return;
         }
         queued = null;
-        switchState(action, Math.max(0, Math.min(offset, action.length() - 1)), holdEnd);
+        if (layered && !overlay) {
+            // Une action entière remplace un calque en cours : toutes les pièces la suivent
+            layered = false;
+        }
+        switchState(action, Math.max(0, Math.min(offset, action.length() - 1)), holdEnd, overlay, false);
     }
 
-    public void play(String name) {
-        play(name, 0, 0, false);
+    /** Interrompt l'action en cours (hors pose finale tenue) : l'état de fond reprend tout de suite. */
+    public synchronized void cut() {
+        queued = null;
+        if (hold || state == loop) {
+            return;
+        }
+        if (layered) {
+            switchState(loop, Math.floorMod(now - loopStart, Math.max(1, loop.length())), false, false, true);
+        } else {
+            switchState(loop, 0, false, false, false);
+        }
     }
 
     /** Une action est en cours (ou va partir) : l'état de fond attend. */
@@ -321,29 +437,52 @@ public final class BossModel {
         turn();
         if (queued != null && now >= queuedAt) {
             ModelFile.State next = queued;
+            boolean overlay = queuedLayered;
             queued = null;
-            switchState(next, Math.max(0, Math.min(queuedOffset, next.length() - 1)), false);
+            if (layered && !overlay) {
+                layered = false;
+            }
+            switchState(next, Math.max(0, Math.min(queuedOffset, next.length() - 1)), false, overlay, false);
         }
         if (state.once() && !hold && now - stateStart >= state.length()) {
-            switchState(loop, 0, false);
+            if (layered) {
+                // Fin d'un calque : les pièces qu'il avait prises rejoignent l'état de fond à sa phase
+                switchState(loop, Math.floorMod(now - loopStart, Math.max(1, loop.length())), false, false, true);
+            } else {
+                switchState(loop, 0, false, false, false);
+            }
         }
         animate();
     }
 
     /**
-     * Change d'état : chaque pièce rejoint en BLEND_TICKS la pose que le nouvel état lui donne à cet instant-là, puis
-     * suit ses images clés. offset : instant du nouvel état où il commence.
+     * Change d'état : chaque pièce concernée rejoint en BLEND_TICKS la pose que le nouvel état lui donne à cet
+     * instant-là, puis suit ses images clés. offset : instant du nouvel état où il commence. overlay : action en calque
+     * (une pièce qu'elle n'anime pas garde l'état de fond). resume : retour à l'état de fond après un calque (une pièce
+     * déjà sur l'état de fond n'est pas touchée).
      */
-    private void switchState(ModelFile.State next, int offset, boolean holdEnd) {
+    private void switchState(ModelFile.State next, int offset, boolean holdEnd, boolean overlay, boolean resume) {
         state = next;
         hold = holdEnd;
         stateStart = now - offset;
+        layered = overlay;
+        if (next == loop) {
+            loopStart = now - offset;
+        }
         int until = now + BLEND_TICKS;
         List<List<EntityData<?>>> updates = new ArrayList<>(ids.length);
         int[] updated = new int[ids.length];
         for (int i = 0; i < ids.length; i++) {
             Part part = model.parts().get(i);
             Track track = part.stateTrack(next.index());
+            if (overlay && track == null) {
+                continue;
+            }
+            if (resume && partState[i] == loop) {
+                continue;
+            }
+            partState[i] = next;
+            partStart[i] = now - offset;
             Affine pose;
             if (track == null) {
                 pose = part.transform();
@@ -369,21 +508,22 @@ public final class BossModel {
     private void animate() {
         List<List<EntityData<?>>> updates = null;
         int[] updated = null;
-        int local = now - stateStart;
         for (int i = 0; i < ids.length; i++) {
             if (now < poseDue[i]) {
                 continue;
             }
-            Track track = model.parts().get(i).stateTrack(state.index());
+            ModelFile.State st = partState[i];
+            Track track = model.parts().get(i).stateTrack(st.index());
             if (track == null || track.keys() == 1) {
                 // La pièce garde une seule pose dans cet état : elle l'a reçue au changement d'état
                 poseDue[i] = Integer.MAX_VALUE;
                 continue;
             }
+            int local = now - partStart[i];
             Affine target;
             int duration;
-            if (state.once()) {
-                if (local >= state.length()) {
+            if (st.once()) {
+                if (local >= st.length()) {
                     poseDue[i] = Integer.MAX_VALUE;
                     continue;
                 }
@@ -438,9 +578,17 @@ public final class BossModel {
         return data;
     }
 
-    /** Orientation : renvoyée quand le corps du boss a assez tourné, lissée par le client ; figée une fois mort. */
+    private float yaw() {
+        return options.yawFromLocation() ? entity.getLocation().getYaw() : entity.getBodyYaw();
+    }
+
+    /** Orientation : renvoyée quand le boss a assez tourné, lissée par le client ; figée une fois mort. */
     private void turn() {
-        float yaw = entity.getBodyYaw();
+        if (options.predictTurn()) {
+            turnPredicted();
+            return;
+        }
+        float yaw = yaw();
         if (shown.isEmpty()) {
             sentYaw = yaw;
             return;
@@ -450,6 +598,57 @@ public final class BossModel {
         }
         sentYaw = yaw;
         nextTurnTick = now + TURN_INTERVAL;
+        sendRotation(yaw);
+    }
+
+    /**
+     * Rotation prédite : le client fait toujours le trajet en turnTicks ticks ; on lui donne pour cible l'orientation
+     * qu'aura le boss à la fin de ce trajet, au rythme où il tourne. Tant que ce rythme ne change pas (le dragon qui
+     * tourne autour de sa proie), une rotation par trajet suffit ; un écart de plus de TURN_THRESHOLD degrés avec ce
+     * que le client montre en déclenche une tout de suite.
+     */
+    private void turnPredicted() {
+        float raw = yaw();
+        if (!haveLastYaw) smoothYaw = raw;
+        float jump = Location.normalizeYaw(raw - smoothYaw);
+        // Demi-tour d'un coup (téléportation, face à sa cible) : suivi sans lissage
+        smoothYaw = Math.abs(jump) > PREDICT_JUMP ? raw : smoothYaw + jump * PREDICT_SMOOTHING;
+        float yaw = smoothYaw;
+        int d = Math.max(1, options.turnTicks());
+        float rate = haveLastYaw ? Location.normalizeYaw(yaw - lastYaw) : 0.0f;
+        lastYaw = yaw;
+        haveLastYaw = true;
+        if (Math.abs(rate) > PREDICT_JUMP) {
+            rate = 0.0f;
+        }
+        yawRate = yawRate * 0.5f + rate * 0.5f;
+        float k = Math.min(1.0f, (now - shownAt) / (float) d);
+        float client = shownFrom + Location.normalizeYaw(shownTo - shownFrom) * k;
+        sentYaw = client;
+        if (shown.isEmpty()) {
+            shownFrom = yaw;
+            shownTo = yaw;
+            shownAt = now - d;
+            sentYaw = yaw;
+            return;
+        }
+        if (hold || now - shownAt < PREDICT_GAP) {
+            return;
+        }
+        float error = Math.abs(Location.normalizeYaw(yaw - client));
+        boolean ended = now - shownAt >= d;
+        boolean turning = Math.abs(yawRate) > 0.5f;
+        if (error < PREDICT_THRESHOLD && !(ended && turning)) {
+            return;
+        }
+        float target = yaw + yawRate * d;
+        shownFrom = client;
+        shownTo = target;
+        shownAt = now;
+        sendRotation(target);
+    }
+
+    private void sendRotation(float yaw) {
         for (Player viewer : shown.values()) {
             List<PacketWrapper<?>> packets = new ArrayList<>(ids.length);
             for (int id : ids) {
@@ -529,7 +728,7 @@ public final class BossModel {
         data.add(new EntityData<>(Part.TEXT, EntityDataTypes.ADV_COMPONENT, label == null ? Component.empty() : label));
         data.add(new EntityData<>(Part.BILLBOARD, EntityDataTypes.BYTE, BILLBOARD_CENTER));
         data.add(new EntityData<>(Part.TRANSLATION, EntityDataTypes.VECTOR3F,
-            new com.github.retrooper.packetevents.util.Vector3f(0, top * scale - (float) entity.getHeight() + LABEL_GAP, 0)));
+            new com.github.retrooper.packetevents.util.Vector3f(0, originOffset() + top * scale + LABEL_GAP, 0)));
         return data;
     }
 
@@ -545,7 +744,7 @@ public final class BossModel {
         Part part = model.parts().get(index);
         List<EntityData<?>> data = new ArrayList<>(part.staticData().size() + 6);
         data.addAll(part.staticData());
-        data.add(new EntityData<>(Part.POS_ROT_DURATION, EntityDataTypes.INT, TURN_SMOOTHING));
+        data.add(new EntityData<>(Part.POS_ROT_DURATION, EntityDataTypes.INT, Math.max(1, options.turnTicks())));
         Affine affine = placed(poses[index]);
         data.add(new EntityData<>(Part.TRANSLATION, EntityDataTypes.VECTOR3F, vector(affine.translation())));
         data.add(new EntityData<>(Part.LEFT_ROTATION, EntityDataTypes.QUATERNION, quaternion(affine.left())));
@@ -556,12 +755,19 @@ public final class BossModel {
     }
 
     /**
+     * Décalage vertical de l'origine du modèle sous le point de passager du boss (au-dessus de sa tête) : toute la
+     * hauteur de l'entité pour un modèle aux pieds du boss, la moitié pour un modèle centré sur sa hitbox.
+     */
+    private float originOffset() {
+        return (float) (-entity.getHeight() * (1.0 - options.originHeight()));
+    }
+
+    /**
      * Transformation d'une pièce chez le client : sa pose dans le modèle, à la taille voulue, tournée pour faire face à
-     * l'avant du boss, et descendue de la hauteur du boss (le modèle est monté sur son point de passager, au-dessus de
-     * sa tête : ses pieds reviennent ainsi à ceux du boss).
+     * l'avant du boss, et descendue sous le point de passager du boss jusqu'à l'origine voulue.
      */
     private Affine placed(Affine pose) {
-        return pose.placed(new Vector3f(0, (float) -entity.getHeight(), 0), facing, scale);
+        return pose.placed(new Vector3f(0, originOffset(), 0), facing, scale);
     }
 
     /** Vrais passagers du boss, gardés dans la liste envoyée. */

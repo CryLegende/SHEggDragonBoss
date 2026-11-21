@@ -30,6 +30,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -381,6 +382,26 @@ public class BossManager {
             if (SHEggDragonBoss.onServerThread()) cleanup.run();
             else plugin.getServer().getScheduler().runTask(plugin, cleanup);
         }
+    }
+
+    /**
+     * Remplace l'entité d'un dragon en vie (Phantom vanilla ↔ entité porteuse de son modèle 3D, quand le modèle devient
+     * prêt ou qu'il est coupé) : même place, mêmes PV, même phase, mêmes contributions ; le combat continue.
+     */
+    public void replaceDragon(DragonBossController old) {
+        LivingEntity entity = old.getBoss();
+        Island island = old.getIsland();
+        Location at = entity.getLocation();
+        double max = old.maxHealth();
+        double health = old.healthNow();
+        int phase = old.phasesStarted();
+        Map<UUID, Double> contributions = new HashMap<>(old.contributions());
+        activeBosses.remove(old.getUniqueId());
+        if (!old.isCancelled()) old.cancel();
+        entity.remove();
+        DragonBossController fresh = DragonBossController.spawn(plugin, this, island, at, max, health, phase, BossController.StartMode.RESTORED);
+        contributions.forEach(fresh::addContribution);
+        plugin.getLogger().info("Dragon de l'île " + island.getUniqueId() + " passé sur l'entité " + fresh.getBoss().getType() + " (modèle 3D).");
     }
 
     public void salvageLostBoss(BossController controller) {

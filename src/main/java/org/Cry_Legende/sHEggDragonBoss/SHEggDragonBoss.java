@@ -121,6 +121,7 @@ public final class SHEggDragonBoss extends JavaPlugin {
         // Modèles 3D des boss (packetevents) : lus en arrière-plan dès maintenant, avant qu'un boss ne soit repris
         this.modelManager = new org.Cry_Legende.sHEggDragonBoss.model.ModelManager(this);
         if (configManager.creaking().model().enabled()) modelManager.preload(configManager.creaking().model().file());
+        if (configManager.dragon().model().enabled()) modelManager.preload(configManager.dragon().model().file());
 
         // Les cœurs du Creaking d'abord : un boss repris au démarrage peut en reposer
         this.heartManager = new HeartManager(this);

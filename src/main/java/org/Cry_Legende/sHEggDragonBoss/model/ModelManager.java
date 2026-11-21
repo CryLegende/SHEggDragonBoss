@@ -49,6 +49,8 @@ public final class ModelManager implements Listener {
     private final boolean available;
     private final Map<String, CompletableFuture<ModelFile>> files = new ConcurrentHashMap<>();
     private final Map<Integer, BossModel> byEntity = new ConcurrentHashMap<>();
+    /** Entités porteuses (invisibles par nature) : elles le restent quand leur modèle est retiré. */
+    private final java.util.Set<Integer> hiddenCarriers = ConcurrentHashMap.newKeySet();
     private PacketListenerCommon veil;
 
     /** Données du Creaking (26.3) : actif (ses yeux brillent) et en train de s'effondrer (ses yeux clignotent). */
@@ -110,6 +112,22 @@ public final class ModelManager implements Listener {
      * fichier illisible ou pas encore lu) : le boss garde alors son apparence vanilla.
      */
     public BossModel attach(LivingEntity entity, String name, double scale, double entityScale, float facing) {
+        return attach(entity, name, scale, entityScale, facing, BossModel.Options.GROUND);
+    }
+
+    /** Le modèle {@code name} est-il lu et prêt à habiller un boss ? (faux sans packetevents) */
+    public boolean ready(String name) {
+        return available && file(name).getNow(null) != null;
+    }
+
+    /** Marque une entité porteuse : son modèle retiré (arrêt du plugin), elle reste invisible et à sa taille. */
+    public void markCarrier(LivingEntity entity, boolean carrier) {
+        if (carrier) hiddenCarriers.add(entity.getEntityId());
+        else hiddenCarriers.remove(entity.getEntityId());
+    }
+
+    /** Comme {@link #attach(LivingEntity, String, double, double, float)}, avec les réglages d'affichage voulus. */
+    public BossModel attach(LivingEntity entity, String name, double scale, double entityScale, float facing, BossModel.Options options) {
         if (!available) {
             return null;
         }
@@ -123,7 +141,7 @@ public final class ModelManager implements Listener {
             size.setBaseValue(entityScale);
         }
         entity.setInvisible(true);
-        BossModel model = new BossModel(entity, file, (float) scale, facing);
+        BossModel model = new BossModel(entity, file, (float) scale, facing, options);
         byEntity.put(entity.getEntityId(), model);
         model.start();
         return model;
@@ -131,11 +149,19 @@ public final class ModelManager implements Listener {
 
     /** Retire le modèle d'un boss ; s'il est encore dans le monde, il retrouve son apparence vanilla. */
     public void detach(LivingEntity entity) {
+        detach(entity, false);
+    }
+
+    /**
+     * Retire le modèle d'un boss. keepHidden : l'entité reste invisible et à sa taille (une entité porteuse, comme le Ghast
+     * du dragon, n'a pas d'apparence vanilla à montrer) ; sinon elle retrouve son apparence et sa taille.
+     */
+    public void detach(LivingEntity entity, boolean keepHidden) {
         BossModel model = byEntity.remove(entity.getEntityId());
         if (model != null) {
             model.destroy();
         }
-        if (entity.isValid() && !entity.isDead()) {
+        if (!keepHidden && entity.isValid() && !entity.isDead()) {
             entity.setInvisible(false);
             AttributeInstance size = entity.getAttribute(Attribute.SCALE);
             if (size != null) {
@@ -147,7 +173,7 @@ public final class ModelManager implements Listener {
     /** Arrêt du plugin : plus aucun modèle chez personne, les boss encore là redeviennent visibles. */
     public void shutdown() {
         for (BossModel model : new ArrayList<>(byEntity.values())) {
-            detach(model.entity());
+            detach(model.entity(), hiddenCarriers.contains(model.entity().getEntityId()));
         }
         HandlerList.unregisterAll(this);
         if (veil != null) {

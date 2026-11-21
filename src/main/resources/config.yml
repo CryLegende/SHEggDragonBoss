@@ -188,7 +188,7 @@ sounds:
 # ----------------------------------------------------------------#
 bosses:
   # ---------------------------------------------------------------
-  # Boss n°1 : le « Jeune Ender Dragon » (Phantom sans IA, déplacé par le plugin). Il tourne autour d'un joueur en lui crachant
+  # Boss n°1 : le « Jeune Ender Dragon » (sans IA, déplacé par le plugin ; habillé de son modèle 3D, voir model). Il tourne autour d'un joueur en lui crachant
   # des boules de feu, plonge sur un joueur tiré au hasard, et rugit à chaque seuil de PV :
   #   - plongeon : il se cabre au-dessus de sa proie, fixe l'endroit visé (un cercle de particules l'indique au sol), puis
   #     fond dessus. L'impact blesse tout ce qui est autour ; il reste ensuite étourdi et encaisse plus de dégâts ;
@@ -208,8 +208,33 @@ bosses:
       style: "SOLID"
     # PV de base. Les PV réels ajoutent dynamic-stats (voir plus bas).
     health: 600.0
-    # Taille du Phantom.
+    # Taille du Phantom (quand le modèle 3D est coupé).
     phantom-size: 7
+
+    # --- MODÈLE 3D ---
+    # Le dragon est remplacé par un modèle fait de têtes de joueur, affiché par paquets comme le Creaking (aucune entité
+    # en plus côté serveur) et animé par le client : vol plané, salve, morsure, plongeon, étourdissement, rugissement,
+    # éclosion, mort. Le boss devient alors une entité porteuse invisible (model.entity-type : un Ghast, qui n'a pas d'yeux
+    # lumineux à cacher, contrairement au Phantom). Il demande packetevents ; avec enabled: false, ou sans packetevents,
+    # le dragon reste un Phantom (entity-type plus haut). Un dragon en vie change d'entité de lui-même (PV, phase et
+    # classement gardés).
+    model:
+      enabled: true
+      # Fichier du modèle (models/<file>.txt dans le jar ; un fichier du même nom dans plugins/SHEggDragonBoss/models/ le remplace).
+      file: "dragon"
+      # Taille du modèle : 1 = 8,8 blocs d'envergure et 7,9 de long ; 1,2 = 10,5 et 9,4.
+      scale: 1.2
+      # Entité porteuse (invisible) et sa taille (attribut scale, la hitbox) : 0,6 = un cube de 2,4 blocs centré sur le corps.
+      entity-type: "GHAST"
+      entity-scale: 0.6
+      # Rotation du modèle autour de la verticale (degrés), si son avant ne regarde pas où va le boss.
+      facing: 0
+      # Lissage des rotations par le client (ticks) : tant qu'il tourne en rond, une rotation par lissage suffit.
+      turn-ticks: 10
+      # Montée et descente du corps en vol plané (1 = celle du modèle, 0 : aucune).
+      heave: 1.0
+      # Bouche du modèle, d'où partent les boules de feu : [droite, haut, avant] en blocs à l'échelle 1.
+      mouth: [0.0, 0.22, 3.6]
 
     # --- COMBAT ---
     # Morsure (le joueur le plus proche, s'il est à melee-range blocs de sa gueule) : dégâts normaux (arrêtés par l'armure),

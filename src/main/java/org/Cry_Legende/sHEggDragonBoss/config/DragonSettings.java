@@ -47,8 +47,21 @@ public record DragonSettings(
     AmbientParticles ambientParticles,
     Rewards rewards,
     DeathSettings death,
-    Texts texts
+    Texts texts,
+    Model model
 ) implements BossSettings {
+
+    /**
+     * Modèle 3D qui remplace l'apparence du dragon : têtes de joueur affichées par paquets (packetevents), comme le
+     * Creaking. Le boss est alors une entité porteuse invisible ({@code carrier}, un Ghast : le Phantom garde ses yeux
+     * lumineux même invisible) à la taille {@code entityScale} (hitbox). file : nom du fichier (models/&lt;file&gt;.txt du
+     * jar) ; scale : taille du modèle ; facing : rotation du modèle (degrés) ; turnTicks : lissage des rotations (ticks) ;
+     * heave : amplitude de la montée et de la descente du corps en vol (1 = celle du modèle, 0 : aucune) ; mouth :
+     * bouche du modèle (blocs à l'échelle 1 : droite, haut, avant depuis le centre), d'où partent les boules de feu.
+     */
+    public record Model(boolean enabled, String file, double scale, EntityType carrier, double entityScale, double facing,
+                        int turnTicks, double heave, double[] mouth) {
+    }
 
     /** Vol en cercle autour de la cible : rayon, hauteur au-dessus de ses yeux, vitesse angulaire en degrés par tick. */
     public record Flight(double orbitRadius, double orbitHeight, double orbitDegreesPerTick) {
